@@ -2,6 +2,7 @@ using GLMakie
 Makie.inline!(true)
 using LinearAlgebra
 using OffsetArrays
+using SparseArrays
 
 global Lx = pi
 global Ly = pi
@@ -38,8 +39,7 @@ function laplacian!(p, e, nx, ny)
     return nothing
 end
 
-
-e = zeros(nx+2, ny+2)
+e = spzeros(nx+2, ny+2)
 e = OffsetArray(e, -1, -1)
 
 function generate_A!(A, nx, ny, e)
@@ -82,4 +82,5 @@ eta[1:nx, 1:ny] = eta_interior
 eta_analytical_int = -1 / ((pi/Lx)^2 + (3*pi/Ly)^2)*f
 # heatmap(eta_analytical_int)
 
+# To check accuracy of numerical scheme
 sqrt(sum((eta_analytical_int .- eta_interior).^2))
