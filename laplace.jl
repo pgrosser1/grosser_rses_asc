@@ -47,7 +47,7 @@ function laplacian(n_y,n_x,e,a,u)
 
 end
 
-function generate_A(n_y,n_x,a)
+function generate_A!(a, n_y, n_x)
 
     u = 0
 
@@ -65,8 +65,7 @@ function generate_A(n_y,n_x,a)
         end
     end
 
-    return a
-
+    return nothing
 end
 
 generate_A(ny,nx,A)
