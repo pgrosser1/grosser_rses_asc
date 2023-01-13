@@ -3,6 +3,7 @@ Makie.inline!(true)
 using LinearAlgebra
 using OffsetArrays
 using SparseArrays
+using BenchmarkTools
 
 const Lx = pi
 const Ly = pi
@@ -27,7 +28,7 @@ f = zeros(nx, ny)
 # Make one-dimensional for linear system
 f_linear = reshape(f, (nx*ny, 1))
 
-A = zeros(ny*nx,ny*nx)
+A = spzeros(ny*nx,ny*nx)
 
 p = zeros(nx, ny)
 
@@ -64,7 +65,7 @@ function generate_A!(A, nx, ny, e)
     return nothing
 end
 
-@time generate_A!(A, nx, ny, e)
+@btime generate_A!(A, nx, ny, e)
 
 A = reshape(A, (nx*ny, nx*ny))
 

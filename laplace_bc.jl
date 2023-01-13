@@ -18,8 +18,8 @@ A = spzeros(nx,nx)
 e = spzeros(nx)
 e = OffsetArray(e, -1)
 
-p = zeros(nx + 1)
-p = OffsetArray(p, -2)
+global p = zeros(nx + 1)
+global p = OffsetArray(p, -2)
 
 # To check -> if BC is applied to all basis vectors, it will also be applied to eta?
 
@@ -43,7 +43,10 @@ end
 
 function neumann_bc(p, nx)
     # Neumann BCs applied to LHS of domain
+    @show p
+    
     p[-1] = p[1]
+
     p[0] = (p[1] + p[-1] - f[0]*dx^2)/2
 
     return nothing
@@ -62,13 +65,14 @@ function generate_A!(A, nx, e)
 
         # Apply BCs
         laplacian!(p, e, nx)
-        
+
         dirichlet_bc(p, nx)
 
         neumann_bc(p, nx)
 
-        p = deleteat!(p, -1)
-        A[:, u] = p
+        @show p
+
+        A[:, u] = p[0:(nx - 1)]
 
     end
 
@@ -76,4 +80,8 @@ function generate_A!(A, nx, e)
 
 end
 
-generate_A!(A, nx, e)
+@time generate_A!(A, nx, e)
+
+A = collect(A) # Convert to dense matrix
+
+Ainv = inv(A)
