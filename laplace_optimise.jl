@@ -4,13 +4,13 @@ using LinearAlgebra
 using OffsetArrays
 using SparseArrays
 
-global Lx = pi
-global Ly = pi
-global nx = 50
-global ny = 50
+const Lx = pi
+const Ly = pi
+const nx = 50
+const ny = 50
 # Make the domain 2 points more (so that nx and ny describe interior)
-global dx = Lx/(nx + 1)
-global dy = Ly/(ny + 1)
+const dx = Lx/(nx + 1)
+const dy = Ly/(ny + 1)
 x = 0:dx:Lx
 y = 0:dy:Ly
 
