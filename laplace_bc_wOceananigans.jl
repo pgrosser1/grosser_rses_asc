@@ -74,6 +74,10 @@ lines!(ax2, x, interior(η_analytical, :, 1, 1), linewidth=3, label="truth")
 
 current_figure()
 
+
+
+
+
 @kernel function ∇²!(∇²f, grid, f)
     i, j, k = @index(Global, NTuple)
     @inbounds ∇²f[i, j, k] = ∇²ᶜᶜᶜ(i, j, k, grid, f)
@@ -90,6 +94,7 @@ function compute_∇²!(∇²φ, φ, arch, grid)
 end
 
 
+
 ∇²η_analytical = Field{LX, LY, LZ}(grid; boundary_conditions)
 compute_∇²!(∇²η_analytical, η_analytical, arch, grid)
 
@@ -101,7 +106,9 @@ axislegend(ax1)
 current_figure()
 
 
-# Solve ∇²φ = r with `PreconditionedConjugateGradientSolver`
+
+
+# Solve ∇²η = f with `PreconditionedConjugateGradientSolver`
 φ_cg = Field{LX, LY, LZ}(grid; boundary_conditions)
 φ_cg .= 0.9η_analytical
 
@@ -115,7 +122,7 @@ fill_halo_regions!(φ_cg)
 lines!(ax2, x, interior(φ_cg, :, 1, 1), linewidth=3, label="CG")
 
 
-# Solve ∇²φ = r with `MultigridSolver`
+# Solve ∇²η = f with `MultigridSolver`
 φ_mg = Field{LX, LY, LZ}(grid; boundary_conditions)
 φ_mg .= 0.9η_analytical
 
@@ -131,8 +138,7 @@ finalize_solver!(mgs)
 lines!(ax2, x, interior(φ_mg, :, 1, 1), linewidth=3, label="MG")
 
 
-
-# Solve ∇²φ = r with `FFTBasedPoissonSolver`
+# Solve ∇²η = f with `FFTBasedPoissonSolver`
 φ_fft = Field{LX, LY, LZ}(grid; boundary_conditions)
 φ_fft .= 0.9*η_analytical
 
@@ -141,7 +147,7 @@ fft_solver.storage .= interior(f)
 
 @info "Solving the Poisson equation with an FFT-based solver..."
 @time solve!(φ_fft, fft_solver, fft_solver.storage)
-# fill_halo_regions!(φ_fft)
+fill_halo_regions!(φ_fft)
 
 lines!(ax2, x, interior(φ_fft, :, 1, 1), linewidth=3, label="FFT")
 
