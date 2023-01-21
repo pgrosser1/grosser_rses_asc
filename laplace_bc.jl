@@ -1,10 +1,12 @@
 using LinearAlgebra
 using OffsetArrays
 using SparseArrays
+using GLMakie
+Makie.inline!(true)
 
 Lx = pi
 nx = 50 # Ordinary points
-hx = 1 # Halo points
+hx = 1  # Halo points
 dx = Lx/(nx + hx - 2)
 x = (-hx*dx):dx:Lx
 x = OffsetArray(x, -2)
