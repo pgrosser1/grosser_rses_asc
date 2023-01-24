@@ -15,20 +15,21 @@ x = OffsetArray(x, -2)
 f = cos.(5*pi/(2*Lx).*x[0:(nx - 2)])
 f = OffsetArray(f, -1)
 
-A = spzeros(nx - 1,nx - 1)
+A = spzeros(nx - 1, nx - 1)
 
 e = spzeros(nx + hx)
 e = OffsetArray(e, -2)
 
-p = zeros(nx + 1)
+p = zeros(nx + hx)
 p = OffsetArray(p, -2)
 
-# To check -> if BC is applied to all basis vectors, it will also be applied to eta?
+# If BC is applied to all basis vectors, it will also be applied to eta
 
 function laplacian!(p, e, nx)
 
     p .= 0
 
+    # Looping over interior points, as well as the point indexed as 0 (allowable due to halo point in the -1 position)
     for k in 0:(nx - 2)
         p[k] = (e[k + 1] + e[k - 1] - 2*e[k])/(dx^2)
     end
@@ -37,7 +38,7 @@ function laplacian!(p, e, nx)
 end
 
 function neumann_bc!(p)
-    # Neumann BCs applied to LHS of domain
+    # Neumann BCs applied to LHS of domain 
     @show p
     
     p[-1] = p[1]
@@ -50,18 +51,22 @@ function generate_A!(A, nx, e, p)
     u = 0
 
     # Generate basis vectors
+    # Skipping a basis vector with a 1 in the (nx - 1) position (boundary point on RHS) -> applies the Dirichlet BC of 0 on the RHS of all basis vectors
+    # This means that (nx - 1) basis vectors will be produced -> A will consequently be (nx - 1) by (nx - 1)
     for i in 0:(nx - 2)
         e .= 0
         e[i] = 1.0
         @show e
+        # Apply the Neumann BC to the basis vectors
         neumann_bc!(e)
         u += 1
 
-        # Apply BCs
+        # Laplacian computation (with Neumann BC applied, this will take care of the point in the 0 position)
         laplacian!(p, e, nx)
 
         @show p
 
+        # Only appending interior points to A
         A[:, u] = p[0:(nx - 2)]
 
     end

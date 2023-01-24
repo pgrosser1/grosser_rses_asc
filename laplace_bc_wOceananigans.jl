@@ -26,23 +26,22 @@ using Statistics: mean
 import Oceananigans.Solvers: precondition!
 
 
-Lx = π
-nx = 100 # Ordinary points
+Lx = 3.0
+nx = 20 # Ordinary points
 hx = 1    # Halo points
 
 arch = CPU()
 
-grid = RectilinearGrid(arch,
-                       topology = (Bounded, Flat, Flat), 
+grid = RectilinearGrid(topology = (Bounded, Flat, Flat), 
                        size = nx,
                        x = (0, Lx),
                        halo=hx)
 
-Nx, Ny, Nz = grid.Nx, grid.Ny, grid.Nz
+ Nx, Ny, Nz = grid.Nx, grid.Ny, grid.Nz
 
 boundary_conditions = (west = GradientBoundaryCondition(0), east=ValueBoundaryCondition(0), north=nothing,south=nothing, top=nothing, bottom=nothing, immersed=nothing)
 
-LX, LY, LZ = Center, Center, Center
+LX, LY, LZ = Face, Center, Center
 
 # for plotting
 x = xnodes(LX, grid)
@@ -51,6 +50,7 @@ x = xnodes(LX, grid)
 f = Field{LX, LY, LZ}(grid; boundary_conditions)
 
 f₀(x, y, z) = cos(5π / (2Lx) * x)
+f₀(x, y, z) = sin(2π / Lx * x)
 
 set!(f, f₀)
 
@@ -61,6 +61,7 @@ ax1 = Axis(fig[1, 1], xlabel="x", title="rhs")
 ax2 = Axis(fig[2, 1], xlabel="x", title="solution")
 
 lines!(ax1, x, interior(f, :, 1, 1), linewidth=3, label="rhs")
+current_figure()
 
 η_analytical = Field{LX, LY, LZ}(grid; boundary_conditions)
 
@@ -84,7 +85,7 @@ current_figure()
 end
 
 function compute_∇²!(∇²φ, φ, arch, grid)
-    # fill_halo_regions!(φ)
+    fill_halo_regions!(φ)
     child_arch = child_architecture(arch)
     event = launch!(child_arch, grid, :xyz, ∇²!, ∇²φ, grid, φ, dependencies=Event(device(child_arch)))
     wait(device(child_arch), event)
