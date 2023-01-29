@@ -29,7 +29,7 @@ function laplacian!(p, e, nx)
 
     p .= 0
 
-    # Looping over interior points, as well as the point indexed as 0 (allowable due to halo point in the -1 position)
+    # Looping over interior points, inc. point indexed 0 (allowable due to halo point in the -1 position)
     for k in 0:(nx - 2)
         p[k] = (e[k + 1] + e[k - 1] - 2*e[k])/(dx^2)
     end
@@ -37,11 +37,11 @@ function laplacian!(p, e, nx)
     return nothing
 end
 
-function neumann_bc!(p)
+function neumann_bc!(e)
     # Neumann BCs applied to LHS of domain 
-    @show p
+    @show e
     
-    p[-1] = p[1]
+    e[-1] = e[1]
 
     return nothing
 end
