@@ -12,11 +12,10 @@ using Oceananigans.Grids: new_data
 using Oceananigans.Solvers: solve!,
                             PreconditionedConjugateGradientSolver,
                             MultigridSolver,
-                            finalize_solver!
+                            initialize_matrix
 
 using KernelAbstractions: @kernel, @index
 
-import Oceananigans.Solvers: initialize_matrix
 import Base: similar
 
 using GLMakie
@@ -24,50 +23,21 @@ Makie.inline!(true)
 
 
 
-# my attempt to enforce boundary conditions to pass along
+# ensure that boundary conditions to pass along when we
+# create fields using similar()
 function Base.similar(f::Field, grid=f.grid)
     loc = location(f)
     return Field(loc,
                  grid,
                  new_data(eltype(parent(f)), grid, loc, f.indices),
-                 deepcopy(f.boundary_conditions),
+                 deepcopy(f.boundary_conditions), # this line is my modification
                  f.indices,
                  f.operand,
                  deepcopy(f.status))
 end
 
-# this won't be necessary when https://github.com/CliMA/Oceananigans.jl/pull/2885 is merged
-function initialize_matrix(::CPU, template_field, linear_operator!, args...; boundary_conditions=nothing)
-
-    loc = location(template_field)
-    Nx, Ny, Nz = size(template_field)
-    grid = template_field.grid
-
-    A = spzeros(eltype(grid), Nx*Ny*Nz, Nx*Ny*Nz)
-    make_column(f) = reshape(interior(f), Nx*Ny*Nz)
-
-    if boundary_conditions === nothing
-        boundary_conditions = FieldBoundaryConditions(grid, loc, template_field.indices)
-    end
-
-    eᵢⱼₖ = similar(template_field)
-    ∇²eᵢⱼₖ = similar(template_field)
-
-    for k = 1:Nz, j in 1:Ny, i in 1:Nx
-        parent(eᵢⱼₖ) .= 0
-        parent(∇²eᵢⱼₖ) .= 0
-        eᵢⱼₖ[i, j, k] = 1
-
-        fill_halo_regions!(eᵢⱼₖ)
-        linear_operator!(∇²eᵢⱼₖ, eᵢⱼₖ, args...)
-
-        A[:, Ny*Nx*(k-1) + Nx*(j-1) + i] .= make_column(∇²eᵢⱼₖ)
-    end
-    
-    return A
-end
-
-# the function we give to the solvers
+# the function that computes the action of the linear operator
+# this function is needed by the solvers
 function compute_∇²!(∇²φ, φ)
     grid = φ.grid
     arch = architecture(grid)
@@ -140,7 +110,7 @@ parent(r) .-= mean(r) # not sure we need this
 fill_halo_regions!(r)
 
 
-A = initialize_matrix(CPU(), φ_truth, compute_∇²!; boundary_conditions)
+A = initialize_matrix(CPU(), φ_truth, compute_∇²!)
 # @show eigvals(collect(A))
 
 
