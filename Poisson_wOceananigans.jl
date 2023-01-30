@@ -69,7 +69,7 @@ grid = RectilinearGrid(arch,
 =#
 
 grid = RectilinearGrid(arch,
-                       size = 300,
+                       size = 128,
                        x = (-1, 1),
                        topology = (Bounded, Flat, Flat))
 
@@ -84,39 +84,44 @@ boundary_conditions = FieldBoundaryConditions(grid, loc,
 
 # a symetric solution with zero mean for φ(-1) = φ(+1)=0
 rhs(x, y, z) = x * exp(-σ^2 * x^2)
-φ(x, y, z) = √π * (x * erf(σ) - erf(σ * x)) / (4σ^3)
+φ(x, y, z) = √π * (x * erf(σ) - erf(σ * x)) / 4σ^3
 
 # an assymetric solution for φ(-1) = φ(+1)=0
 rhs(x, y, z) = (x - 1/4) * exp(- σ^2 * (x - 1/4)^2)
-φ(x, y, z) = √π * ((1 + x) * erf(3σ/4) + (x - 1)* erf(5σ/4) + 2 * erf(σ/4 - x * σ)) / (8σ^3)
+φ(x, y, z) = √π * ((1 + x) * erf(3σ / 4) + (x - 1) * erf(5σ / 4) + 2erf(σ/4 - x * σ)) / 8σ^3
 
 # a symetric solution with zero mean for φ'(-1) = φ'(+1)=0
 # rhs(x, y, z) = x * exp(-σ^2 * x^2)
-# φ(x, y, z) = x * exp(-σ^2) / (2σ^2) - √π * erf(x * σ) / (4σ^3)
-
+# φ(x, y, z) = x * exp(-σ^2) / 2σ^2 - √π * erf(x * σ) / 4σ^3
 
 # Solve ∇²φ = r
+
+# The true solution
 φ_truth = CenterField(grid; boundary_conditions)
 
-# Initialize zero-mean "truth" solution
+# Initialize
 set!(φ_truth, φ)
+
+# Ensure the boundary conditions are correct
 fill_halo_regions!(φ_truth)
 
 
-# Calculate Laplacian of "truth"
+# The right-hand-side
 r = CenterField(grid)
 set!(r, rhs)
 parent(r) .-= mean(r) # not sure we need this
 fill_halo_regions!(r)
 
-
-A = initialize_matrix(CPU(), φ_truth, compute_∇²!)
+# Construct the matrix to inspect
+A = initialize_matrix(arch, φ_truth, compute_∇²!)
 # @show eigvals(collect(A))
 
 
-φ_mg = CenterField(grid; boundary_conditions)
 
 # Now solve numerically via MG or CG solvers
+
+# the solution via the MG solver
+φ_mg = CenterField(grid; boundary_conditions)
 
 @info "Constructing an Algebraic Multigrid solver..."
 @time mgs = MultigridSolver(compute_∇²!, template_field=φ_mg)
@@ -125,7 +130,8 @@ A = initialize_matrix(CPU(), φ_truth, compute_∇²!)
 @time solve!(φ_mg, mgs, r)
 fill_halo_regions!(φ_mg)
 
-# Solve Poisson equation
+
+# the solution via the CG solver
 φ_cg = CenterField(grid; boundary_conditions)
 
 @info "Constructing a Preconditioned Congugate Gradient solver..."
@@ -136,7 +142,7 @@ fill_halo_regions!(φ_mg)
 fill_halo_regions!(φ_cg)
 
 
-# Compute the ∇²φ to see how good it matches the right-hand-side
+# Compute the ∇²φ to see how good it matches with the right-hand-side
 ∇²φ_cg = CenterField(grid)
 compute_∇²!(∇²φ_cg, φ_cg)
 fill_halo_regions!(∇²φ_cg)
@@ -147,20 +153,19 @@ fill_halo_regions!(∇²φ_mg)
 
 
 # Now plot
-
 x, y, z = nodes(r)
 
 fig = Figure()
 ax1 = Axis(fig[1, 1], xlabel="x", ylabel="∇²φ")
-lines!(ax1, x, interior(r, :, 1, 1), linewidth=6, label="truth")
+lines!(ax1, x, interior(r,      :, 1, 1), linewidth=6, label="truth")
 lines!(ax1, x, interior(∇²φ_mg, :, 1, 1), linewidth=3, label="MG")
 lines!(ax1, x, interior(∇²φ_cg, :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
 axislegend(ax1)
 
 ax2 = Axis(fig[2, 1], xlabel="x", ylabel="φ")
 lines!(ax2, x, interior(φ_truth, :, 1, 1), linewidth=6, label="truth")
-lines!(ax2, x, interior(φ_mg, :, 1, 1), linewidth=3, label="MG")
-lines!(ax2, x, interior(φ_cg, :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
+lines!(ax2, x, interior(φ_mg,    :, 1, 1), linewidth=3, label="MG")
+lines!(ax2, x, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
 axislegend(ax2)
 
 max_r = maximum(abs.(r))
