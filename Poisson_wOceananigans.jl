@@ -14,6 +14,8 @@ using Oceananigans.Solvers: solve!,
                             MultigridSolver,
                             initialize_matrix
 
+using IterativeSolvers
+
 using KernelAbstractions: @kernel, @index
 
 import Base: similar
@@ -68,8 +70,10 @@ grid = RectilinearGrid(arch,
                        topology = (Bounded, Periodic, Periodic))
 =#
 
+Nx = 64
+
 grid = RectilinearGrid(arch,
-                       size = 128,
+                       size = Nx,
                        x = (-1, 1),
                        topology = (Bounded, Flat, Flat))
 
@@ -169,4 +173,12 @@ axislegend(ax2)
 
 max_r = maximum(abs.(r))
 ylims!(ax1, (-1.2*max_r, 1.2max_r))
+current_figure()
+
+φ_plain_cg = zeros(2Nx)
+cg!(φ_plain_cg, [A 0A; 0A A], [collect(r[1:Nx, 1, 1]); collect(r[1:Nx, 1, 1])])
+
+lines(φ_plain_cg, color=:red, label="iter")
+current_figure()
+lines!(ax2, x, φ_plain_cg, color=:red, label="iter")
 current_figure()
