@@ -109,7 +109,6 @@ fill_halo_regions!(φ_truth)
 # The right-hand-side
 r = CenterField(grid)
 set!(r, rhs)
-parent(r) .-= mean(r) # not sure we need this
 fill_halo_regions!(r)
 
 # Construct the matrix to inspect
