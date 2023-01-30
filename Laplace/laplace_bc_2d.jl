@@ -6,8 +6,8 @@ Makie.inline!(true)
 
 const Lx = pi
 const Ly = pi
-const nx = 4
-const ny = 3
+const nx = 50
+const ny = 40
 # Define a "depth" of halo points
 const hx = 1
 const hy = 1
@@ -57,10 +57,12 @@ function laplacian!(p, e, nx, ny)
 end
 
 function neumann_bc!(e)
-    # Neumann BC applied to top and LHS of domain (only in interior)
+    # Neumann BC applied to top and LHS of domain (works applied to only interior or all borders)
 
-    e[-1,0:(ny - 2)] = e[1,0:(ny - 2)] 
-    e[0:(nx - 2),-1] = e[0:(nx - 2),1]
+    #e[-1,0:(ny - 2)] = e[1,0:(ny - 2)] #Only interior
+    #e[0:(nx - 2),-1] = e[0:(nx - 2),1]
+    e[-1,-1:(ny - 1)] = e[1,-1:(ny - 1)] # All borders
+    e[-1:(nx - 1),-1] = e[-1:(nx - 1),1]
 
     return nothing
 end
@@ -69,8 +71,8 @@ function generate_A!(A, nx, ny, e, p)
     u = 0
 
     # Generate basis vectors (skipping placement of halo points & Dirichlet BC points)
-    for i in 0:(ny - 2)
-        for j in 0:(nx - 2)
+    for j in 0:(ny - 2)
+        for i in 0:(nx - 2)
             e .= 0
             e[i, j] = 1.0
             @show e
