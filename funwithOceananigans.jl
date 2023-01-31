@@ -184,6 +184,7 @@ lines!(ax4, y, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label=
 max_r = maximum(abs.(r))
 ylims!(ax1, (-1.2*max_r, 1.2max_r))
 current_figure()
+
 #=
 φ_plain_cg = zeros(Nx)
 cg!(φ_plain_cg, A, collect(r[1:Nx, 1, 1]))
