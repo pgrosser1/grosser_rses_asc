@@ -57,10 +57,12 @@ function laplacian!(p, e, nx, ny)
 end
 
 function neumann_bc!(e)
-    # Neumann BC applied to top and LHS of domain (works applied to only interior or all borders)
+    # Neumann BC applied to top and LHS of domain
 
-    #e[-1,0:(ny - 2)] = e[1,0:(ny - 2)] #Only interior
-    #e[0:(nx - 2),-1] = e[0:(nx - 2),1]
+    #=
+    e[-1,0:(ny - 2)] = e[1,0:(ny - 2)]
+    e[0:(nx - 2),-1] = e[0:(nx - 2),1]
+    =#
     e[-1,-1:(ny - 1)] = e[1,-1:(ny - 1)] # All borders
     e[-1:(nx - 1),-1] = e[-1:(nx - 1),1]
 
@@ -105,7 +107,6 @@ eta_linear = Ainv * f_linear
 eta_interior = reshape(eta_linear, ((nx - 1),(ny - 1)))
 eta = OffsetArray(zeros(nx, ny), -1, -1)
 eta[0:(nx - 2), 0:(ny - 2)] = eta_interior
-
 
 # For comparison
 

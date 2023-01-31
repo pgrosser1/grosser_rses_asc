@@ -14,7 +14,7 @@ using Oceananigans.Solvers: solve!,
                             MultigridSolver,
                             initialize_matrix
 
-using IterativeSolvers
+#using IterativeSolvers
 
 using KernelAbstractions: @kernel, @index
 
@@ -23,10 +23,7 @@ import Base: similar
 using GLMakie
 Makie.inline!(true)
 
-
-
-# ensure that boundary conditions to pass along when we
-# create fields using similar()
+# ensure that boundary conditions to pass along when we create fields using similar()
 function Base.similar(f::Field, grid=f.grid)
     loc = location(f)
     return Field(loc,
@@ -39,7 +36,6 @@ function Base.similar(f::Field, grid=f.grid)
 end
 
 # the function that computes the action of the linear operator
-# this function is needed by the solvers
 function compute_∇²!(∇²φ, φ) # Laplacian linear operator
     grid = φ.grid
     arch = architecture(grid)
@@ -71,28 +67,31 @@ grid = RectilinearGrid(arch,
 =#
 
 Nx = 64
+Ny = 64
 
 grid = RectilinearGrid(arch,
-                       size = Nx,
-                       x = (-1, 1),
-                       topology = (Bounded, Flat, Flat))
+                       size = (Nx, Ny),
+                       x = (0, Lx),
+                       y = (0, Ly),
+                       topology = (Bounded, Bounded, Flat))
 
 loc = (Center, Center, Center)
 boundary_conditions = FieldBoundaryConditions(grid, loc,
                                               west = ValueBoundaryCondition(0),
-                                              east = GradientBoundaryCondition(0))
-
-
+                                              east = ValueBoundaryCondition(0),
+                                              north = ValueBoundaryCondition(0),
+                                              south = ValueBoundaryCondition(0))
 
 σ = 8
+Lx = pi
+Ly = pi
 
-# a symetric solution with zero mean for φ(-1) = φ(+1)=0
-rhs(x, y, z) = x * exp(-σ^2 * x^2)
-φ(x, y, z) = √π * (x * erf(σ) - erf(σ * x)) / 4σ^3
+rhs(x, y, z) = sin(5*pi*x/(Lx))*sin(3*pi*y/(Ly))
+φ(x, y, z) = -1/((5*pi/(Lx))^2 + (3*pi/(Ly))^2)*sin(5*pi*x/(Lx))*sin(3*pi*y/(Ly))
 
 # an assymetric solution for φ(-1) = φ(+1)=0
-rhs(x, y, z) = (x - 1/4) * exp(- σ^2 * (x - 1/4)^2)
-φ(x, y, z) = √π * ((1 + x) * erf(3σ / 4) + (x - 1) * erf(5σ / 4) + 2erf(σ/4 - x * σ)) / 8σ^3
+# rhs(x, y, z) = (x - 1/4) * exp(- σ^2 * (x - 1/4)^2)
+# φ(x, y, z) = √π * ((1 + x) * erf(3σ / 4) + (x - 1) * erf(5σ / 4) + 2erf(σ/4 - x * σ)) / 8σ^3
 
 # a symetric solution with zero mean for φ'(-1) = φ'(+1)=0
 # rhs(x, y, z) = x * exp(-σ^2 * x^2)
@@ -115,11 +114,9 @@ r = CenterField(grid)
 set!(r, rhs)
 fill_halo_regions!(r)
 
-# Construct the matrix to inspect
+# Construct the matrix to inspect -> φ_truth gives the field template, compute_∇² is the linear operator by which A is created
 A = initialize_matrix(arch, φ_truth, compute_∇²!)
 # @show eigvals(collect(A))
-
-
 
 # Now solve numerically via MG or CG solvers
 
@@ -170,16 +167,28 @@ ax2 = Axis(fig[2, 1], xlabel="x", ylabel="φ")
 lines!(ax2, x, interior(φ_truth, :, 1, 1), linewidth=6, label="truth")
 lines!(ax2, x, interior(φ_mg,    :, 1, 1), linewidth=3, label="MG")
 lines!(ax2, x, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
-axislegend(ax2)
+#axislegend(ax2)
+
+ax3 = Axis(fig[3, 1], xlabel="y", ylabel="∇²φ")
+lines!(ax3, y, interior(r,      :, 1, 1), linewidth=6, label="truth")
+lines!(ax3, y, interior(∇²φ_mg, :, 1, 1), linewidth=3, label="MG")
+lines!(ax3, y, interior(∇²φ_cg, :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
+#axislegend(ax3)
+
+ax4 = Axis(fig[4, 1], xlabel="y", ylabel="φ")
+lines!(ax4, y, interior(φ_truth, :, 1, 1), linewidth=6, label="truth")
+lines!(ax4, y, interior(φ_mg,    :, 1, 1), linewidth=3, label="MG")
+lines!(ax4, y, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
+#axislegend(ax4)
 
 max_r = maximum(abs.(r))
 ylims!(ax1, (-1.2*max_r, 1.2max_r))
 current_figure()
-
+#=
 φ_plain_cg = zeros(Nx)
 cg!(φ_plain_cg, A, collect(r[1:Nx, 1, 1]))
-
 current_figure()
+=#
 
 #=
 φ_plain_cg = zeros(2Nx)
