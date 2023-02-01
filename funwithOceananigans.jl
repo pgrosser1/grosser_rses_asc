@@ -52,7 +52,6 @@ end
     @inbounds ∇²f[i, j, k] = ∇²ᶜᶜᶜ(i, j, k, grid, f)
 end
 
-
 # Now let's construct a grid and play around
 arch = CPU()
 
@@ -66,8 +65,8 @@ grid = RectilinearGrid(arch,
                        topology = (Bounded, Periodic, Periodic))
 =#
 
-Nx = 64
-Ny = 64
+Nx = 128
+Ny = 128
 
 grid = RectilinearGrid(arch,
                        size = (Nx, Ny),
@@ -167,19 +166,19 @@ ax2 = Axis(fig[2, 1], xlabel="x", ylabel="φ")
 lines!(ax2, x, interior(φ_truth, :, 1, 1), linewidth=6, label="truth")
 lines!(ax2, x, interior(φ_mg,    :, 1, 1), linewidth=3, label="MG")
 lines!(ax2, x, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
-#axislegend(ax2)
+axislegend(ax2)
 
 ax3 = Axis(fig[3, 1], xlabel="y", ylabel="∇²φ")
 lines!(ax3, y, interior(r,      :, 1, 1), linewidth=6, label="truth")
 lines!(ax3, y, interior(∇²φ_mg, :, 1, 1), linewidth=3, label="MG")
 lines!(ax3, y, interior(∇²φ_cg, :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
-#axislegend(ax3)
+axislegend(ax3)
 
 ax4 = Axis(fig[4, 1], xlabel="y", ylabel="φ")
 lines!(ax4, y, interior(φ_truth, :, 1, 1), linewidth=6, label="truth")
 lines!(ax4, y, interior(φ_mg,    :, 1, 1), linewidth=3, label="MG")
 lines!(ax4, y, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
-#axislegend(ax4)
+axislegend(ax4)
 
 max_r = maximum(abs.(r))
 ylims!(ax1, (-1.2*max_r, 1.2max_r))

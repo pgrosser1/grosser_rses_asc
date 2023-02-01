@@ -7,12 +7,13 @@ using Oceananigans
 using Oceananigans.Architectures: architecture, device_event, device
 using Oceananigans.Utils: launch!
 using Oceananigans.BoundaryConditions: fill_halo_regions!
-using Oceananigans.Operators: ∇²ᶜᶜᶜ
+using Oceananigans.Operators
 using Oceananigans.Grids: new_data
 using Oceananigans.Solvers: solve!,
                             PreconditionedConjugateGradientSolver,
-                            MultigridSolver,
-                            initialize_matrix
+                            MultigridSolver
+
+import Oceananigans.Solvers: initialize_matrix
 
 using IterativeSolvers
 
@@ -23,10 +24,37 @@ import Base: similar
 using GLMakie
 Makie.inline!(true)
 
+λ = 0.1
+g = 9.8
+H = 100
+f = 0.5
 
 
-# ensure that boundary conditions to pass along when we
-# create fields using similar()
+function initialize_matrix(::CPU, template_field, linear_operator!, args...)
+    Nx, Ny, Nz = size(template_field)
+    A = spzeros(eltype(template_field.grid), Nx*Ny*Nz, Nx*Ny*Nz)
+    make_column(f) = reshape(interior(f), Nx*Ny*Nz)
+
+    eᵢⱼₖ = similar(template_field)
+    ∇²eᵢⱼₖ = similar(template_field)
+    @show "hi there"
+    Nx, Ny, Nz = length.(nodes(template_field))
+
+    for k = 1:Nz, j in 1:Ny, i in 1:Nx
+        parent(eᵢⱼₖ) .= 0
+        parent(∇²eᵢⱼₖ) .= 0
+        eᵢⱼₖ[i, j, k] = 1
+        fill_halo_regions!(eᵢⱼₖ)
+        linear_operator!(∇²eᵢⱼₖ, eᵢⱼₖ, args...)
+
+        A[:, Ny*Nx*(k-1) + Nx*(j-1) + i] .= make_column(∇²eᵢⱼₖ)
+    end
+    
+    return A
+end
+
+
+# Ensure that boundary conditions to pass along when we create fields using similar()
 function Base.similar(f::Field, grid=f.grid)
     loc = location(f)
     return Field(loc,
@@ -38,40 +66,170 @@ function Base.similar(f::Field, grid=f.grid)
                  deepcopy(f.status))
 end
 
-# the function that computes the action of the linear operator
-# this function is needed by the solvers
-function compute_∇²!(∇²φ, φ) # Laplacian linear operator
+# Functions that compute the action of the linear operators (needed by the solvers)
+
+function compute_Auu!(Auuφ, φ) # First argument is what it produces, second is what it acts on
     grid = φ.grid
     arch = architecture(grid)
 
     # parent(φ) .-= mean(φ)
     fill_halo_regions!(φ)
-    event = launch!(arch, grid, :xyz, ∇²!, ∇²φ, grid, φ, dependencies=device_event(arch))
+    event = launch!(arch, grid, :xyz, Auu!, Auuφ, grid, φ, dependencies=device_event(arch))
     wait(device(arch), event)
     return nothing
 end
 
-@kernel function ∇²!(∇²f, grid, f) # This function would be edited to be the linear operator of interest
-    i, j, k = @index(Global, NTuple)
-    @inbounds ∇²f[i, j, k] = ∇²ᶜᶜᶜ(i, j, k, grid, f)
+function compute_Auv!(Auvφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Auv!, Auvφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
 end
+
+function compute_Auη!(Auηφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Auη!, Auηφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+function compute_Avu!(Avuφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Avu!, Avuφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+function compute_Avv!(Avvφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Avv!, Avvφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+function compute_Avη!(Avηφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Avη!, Avηφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+function compute_Aηu!(Aηuφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Aηu!, Aηuφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+function compute_Aηv!(Aηvφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Aηv!, Aηvφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+function compute_Aηη!(Aηηφ, φ)
+    grid = φ.grid
+    arch = architecture(grid)
+
+    # parent(φ) .-= mean(φ)
+    fill_halo_regions!(φ)
+    event = launch!(arch, grid, :xyz, Aηη!, Aηηφ, grid, φ, dependencies=device_event(arch))
+    wait(device(arch), event)
+    return nothing
+end
+
+# Linear operators
+# Exponents represent x, y, z (not u, v, η) -> u "environment" requires fcc, v requires cfc, η requires ccc
+
+@kernel function Auu!(Auuφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Auuφ[i, j, k] = λ * φ[i, j, k]
+end
+
+@kernel function Auv!(Auvφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Auvφ[i, j, k] = - f * ℑxyᶠᶜᵃ(i, j, k, grid, φ)
+end # Interpolation needed as v is cfc -> needs to become fcc for u environment
+
+@kernel function Auη!(Auηφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Auηφ[i, j, k] = g * ∂xᶠᶜᶜ(i, j, k, grid, φ)
+end # Interpolation not neccessary as ∂x turns η's x,y,z = ccc environment into x,y,z = fcc (required for u)
+
+@kernel function Avu!(Avuφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Avuφ[i, j, k] = -f * ℑxyᶜᶠᵃ(i, j, k, grid, φ)
+end
+
+@kernel function Avv!(Avvφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Avvφ[i, j, k] = λ * φ[i, j, k]
+end
+
+@kernel function Avη!(Avηφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Avηφ[i, j, k] = g * ∂yᶜᶠᶜ(i, j, k, grid, φ)
+end
+
+@kernel function Aηu!(Aηuφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Aηuφ[i, j, k] = H * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
+end
+
+@kernel function Aηv!(Aηvφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Aηvφ[i, j, k] = H * ∂yᶜᶜᶜ(i, j, k, grid, φ)
+end
+
+@kernel function Aηη!(Aηηφ, grid, φ)
+    i, j, k = @index(Global, NTuple)
+    @inbounds Aηηφ[i, j, k] = 0
+end
+
 
 
 # Now let's construct a grid and play around
 arch = CPU()
+Nx = 8, Ny = 6
 
-#=
+
 grid = RectilinearGrid(arch,
-                       size = (100, 1, 1),
+                       size = (Nx, Ny, 1),
                        x = (-1, 1),
                        y = (0, 1),
                        z = (0, 1),
                        halo = (1, 1, 1),
-                       topology = (Bounded, Periodic, Periodic))
-=#
-
-Nx = 64
-
+                       topology = (Bounded, Bounded, Periodic))
+#=
 grid = RectilinearGrid(arch,
                        size = Nx,
                        x = (-1, 1),
@@ -83,7 +241,7 @@ boundary_conditions = FieldBoundaryConditions(grid, loc,
                                               east = GradientBoundaryCondition(0))
 
 
-
+=#
 σ = 8
 
 # a symetric solution with zero mean for φ(-1) = φ(+1)=0
@@ -115,8 +273,22 @@ r = CenterField(grid)
 set!(r, rhs)
 fill_halo_regions!(r)
 
+u = XFaceField(grid)
+v = XFaceField(grid)
+
 # Construct the matrix to inspect
-A = initialize_matrix(arch, φ_truth, compute_∇²!)
+Auu = initialize_matrix(arch, u, compute_Auu!)
+Auv = initialize_matrix(arch, v, compute_Auv!)
+Auη = initialize_matrix(arch, φ_truth, compute_Auη!)
+Avu = initialize_matrix(arch, u, compute_Avu!)
+Avv = initialize_matrix(arch, v, compute_Avv!)
+Avη = initialize_matrix(arch, φ_truth, compute_Avη!)
+Aηu = initialize_matrix(arch, u, compute_Aηu!)
+Aηv = initialize_matrix(arch, v, compute_Aηv!)
+Aηη = initialize_matrix(arch, φ_truth, compute_Aηη!)
+
+
+A = [ Auu  Auv Auη;]
 # @show eigvals(collect(A))
 
 
