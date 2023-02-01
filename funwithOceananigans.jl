@@ -18,7 +18,7 @@ using Oceananigans.Solvers: solve!,
 
 using KernelAbstractions: @kernel, @index
 
-import Base: similar
+import Base: similar 
 
 using GLMakie
 Makie.inline!(true)
