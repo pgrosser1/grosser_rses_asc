@@ -30,24 +30,29 @@ H = 100
 f = 0.5
 
 
-function initialize_matrix(::CPU, template_field, linear_operator!, args...)
-    Nx, Ny, Nz = size(template_field)
-    A = spzeros(eltype(template_field.grid), Nx*Ny*Nz, Nx*Ny*Nz)
-    make_column(f) = reshape(interior(f), Nx*Ny*Nz)
+function initialize_matrix(::CPU, template_output_field, template_input_field, linear_operator!, args...)
 
-    eᵢⱼₖ = similar(template_field)
-    ∇²eᵢⱼₖ = similar(template_field)
-    @show "hi there"
-    Nx, Ny, Nz = length.(nodes(template_field))
+    Nxᵢₙ,  Nyᵢₙ,  Nzᵢₙ  = length.(nodes(template_input_field))
+    Nxₒᵤₜ, Nyₒᵤₜ, Nzₒᵤₜ = length.(nodes(template_output_field))
 
-    for k = 1:Nz, j in 1:Ny, i in 1:Nx
+    template_input_field.grid !== template_output_field.grid && error("grids must be the same")
+    grid = template_input_field.grid
+    
+    A = spzeros(eltype(grid), Nxₒᵤₜ*Nyₒᵤₜ*Nzₒᵤₜ, Nxᵢₙ*Nyᵢₙ*Nzᵢₙ)
+
+    make_output_column(f) = reshape(interior(f), Nxₒᵤₜ*Nyₒᵤₜ*Nzₒᵤₜ)
+
+    eᵢⱼₖ = similar(template_input_field)
+    Aeᵢⱼₖ = similar(template_output_field)
+
+    for k = 1:Nzᵢₙ, j in 1:Nyᵢₙ, i in 1:Nxᵢₙ
         parent(eᵢⱼₖ) .= 0
-        parent(∇²eᵢⱼₖ) .= 0
+        parent(Aeᵢⱼₖ) .= 0
         eᵢⱼₖ[i, j, k] = 1
         fill_halo_regions!(eᵢⱼₖ)
-        linear_operator!(∇²eᵢⱼₖ, eᵢⱼₖ, args...)
+        linear_operator!(Aeᵢⱼₖ, eᵢⱼₖ, args...)
 
-        A[:, Ny*Nx*(k-1) + Nx*(j-1) + i] .= make_column(∇²eᵢⱼₖ)
+        A[:, Nyᵢₙ*Nxᵢₙ*(k-1) + Nxᵢₙ*(j-1) + i] .= make_output_column(Aeᵢⱼₖ)
     end
     
     return A
@@ -215,11 +220,10 @@ end
     @inbounds Aηηφ[i, j, k] = 0
 end
 
-
-
 # Now let's construct a grid and play around
 arch = CPU()
-Nx = 8, Ny = 6
+Nx = 4
+Ny = 1
 
 
 grid = RectilinearGrid(arch,
@@ -229,7 +233,7 @@ grid = RectilinearGrid(arch,
                        z = (0, 1),
                        halo = (1, 1, 1),
                        topology = (Bounded, Bounded, Periodic))
-#=
+
 grid = RectilinearGrid(arch,
                        size = Nx,
                        x = (-1, 1),
@@ -241,7 +245,6 @@ boundary_conditions = FieldBoundaryConditions(grid, loc,
                                               east = GradientBoundaryCondition(0))
 
 
-=#
 σ = 8
 
 # a symetric solution with zero mean for φ(-1) = φ(+1)=0
@@ -273,21 +276,32 @@ r = CenterField(grid)
 set!(r, rhs)
 fill_halo_regions!(r)
 
-u = XFaceField(grid)
-v = XFaceField(grid)
+loc = (Face, Center, Center)
+boundary_conditions = FieldBoundaryConditions(grid, loc,
+                                              west = OpenBoundaryCondition(0),
+                                              east = OpenBoundaryCondition(0))
+u = Field(loc, grid; boundary_conditions)
+
+loc = (Center, Face, Center)
+boundary_conditions = FieldBoundaryConditions(grid, loc,
+                                              west = OpenBoundaryCondition(0),
+                                              east = OpenBoundaryCondition(0))
+v = Field(loc, grid; boundary_conditions)
+
+η = CenterField(grid)
 
 # Construct the matrix to inspect
-Auu = initialize_matrix(arch, u, compute_Auu!)
-Auv = initialize_matrix(arch, v, compute_Auv!)
-Auη = initialize_matrix(arch, φ_truth, compute_Auη!)
-Avu = initialize_matrix(arch, u, compute_Avu!)
-Avv = initialize_matrix(arch, v, compute_Avv!)
-Avη = initialize_matrix(arch, φ_truth, compute_Avη!)
-Aηu = initialize_matrix(arch, u, compute_Aηu!)
-Aηv = initialize_matrix(arch, v, compute_Aηv!)
-Aηη = initialize_matrix(arch, φ_truth, compute_Aηη!)
+Auu = initialize_matrix(arch, u, u, compute_Auu!)
+Auv = initialize_matrix(arch, u, v, compute_Auv!)
+Auη = initialize_matrix(arch, u, η, compute_Auη!)
+Avu = initialize_matrix(arch, v, u, compute_Avu!)
+Avv = initialize_matrix(arch, v, v, compute_Avv!)
+Avη = initialize_matrix(arch, v, η, compute_Avη!)
+Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
+Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
+Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
-
+#=
 A = [ Auu  Auv Auη;]
 # @show eigvals(collect(A))
 
@@ -359,4 +373,5 @@ cg!(φ_plain_cg, [A 0A; 0A A], [collect(r[1:Nx, 1, 1]); collect(r[1:Nx, 1, 1])])
 
 lines(φ_plain_cg, color=:red, label="iter")
 current_figure()
+=#
 =#
