@@ -32,11 +32,12 @@ H = 100 # maximum depth
 
 function initialize_matrix(::CPU, template_output_field, template_input_field, linear_operator!, args...)
 
-    Nxᵢₙ,  Nyᵢₙ,  Nzᵢₙ  = length.(nodes(template_input_field))
-    Nxₒᵤₜ, Nyₒᵤₜ, Nzₒᵤₜ = length.(nodes(template_output_field))
+    Nxᵢₙ,  Nyᵢₙ,  Nzᵢₙ  = size(template_input_field)
+    Nxₒᵤₜ, Nyₒᵤₜ, Nzₒᵤₜ = size(template_output_field)
 
     template_input_field.grid !== template_output_field.grid && error("grids must be the same")
     grid = template_input_field.grid
+    loc = location(template_output_field) # The output that matters!! (Impose BCs on output)
     
     A = spzeros(eltype(grid), Nxₒᵤₜ*Nyₒᵤₜ*Nzₒᵤₜ, Nxᵢₙ*Nyᵢₙ*Nzᵢₙ)
 
@@ -45,12 +46,20 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
     eᵢⱼₖ = similar(template_input_field)
     Aeᵢⱼₖ = similar(template_output_field)
 
+    iter = 0
     for k = 1:Nzᵢₙ, j in 1:Nyᵢₙ, i in 1:Nxᵢₙ
+        @show iter += 1 
         parent(eᵢⱼₖ) .= 0
         parent(Aeᵢⱼₖ) .= 0
         eᵢⱼₖ[i, j, k] = 1
         fill_halo_regions!(eᵢⱼₖ)
         linear_operator!(Aeᵢⱼₖ, eᵢⱼₖ, args...)
+        # @show peripheral_node(i, j, k, grid, loc[1](), loc[2](), loc[3]())
+        
+        if peripheral_node(i, j, k, grid, loc[1](), loc[2](), loc[3]())
+            parent(Aeᵢⱼₖ) .= 0
+            Aeᵢⱼₖ[i, j, k] = 1
+        end # Making all the peripheral points 1 (so 1*u_peripheral = 0)
 
         A[:, Nyᵢₙ*Nxᵢₙ*(k-1) + Nxᵢₙ*(j-1) + i] .= make_output_column(Aeᵢⱼₖ)
     end
@@ -58,6 +67,9 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
     return A
 end
 
+Auu = initialize_matrix(arch, u, u, compute_Auu!)
+Auv = initialize_matrix(arch, u, v, compute_Auv!)
+Auη = initialize_matrix(arch, u, η, compute_Auη!)
 
 # Ensure that boundary conditions to pass along when we create fields using similar()
 function Base.similar(f::Field, grid=f.grid)
@@ -75,21 +87,18 @@ include("SWE_matrix_components.jl")
 
 # Now let's construct a grid and play around
 arch = CPU()
-Nx = 5
+Nx = 4
 Ny = 2
 Nz = 1
-
-depth = H
-
-
 
 underlying_grid = RectilinearGrid(arch,
                                   size = (Nx, Ny, Nz),
                                   x = (-1, 1),
                                   y = (0, 1),
-                                  z = (-depth, 0),
+                                  z = (-H, 0),
                                   halo = (1, 1, 1),
-                                  topology = (Bounded, Bounded, Periodic))
+                                  topology = (Periodic, Periodic, Bounded))
+# v (y) can be periodic if you make the northern-most and southern-most points 0 (so then periodic is appropriate)
 
 depth = -H .+ zeros(Nx, Ny)
 depth[1, :] .= 10
@@ -103,11 +112,34 @@ grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(depth))
 
 using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 
-[inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
-[inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
-[peripher(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
+[!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
+[!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
+[peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
 
 
+
+loc = (Face, Center, Center)
+boundary_conditions = FieldBoundaryConditions(grid, loc,
+                                              west = OpenBoundaryCondition(0),
+                                              east = OpenBoundaryCondition(0))
+u = Field(loc, grid)
+
+loc = (Center, Face, Center)
+boundary_conditions = FieldBoundaryConditions(grid, loc,
+                                              west = OpenBoundaryCondition(0),
+                                              east = OpenBoundaryCondition(0))
+v = Field(loc, grid)
+
+η = CenterField(grid)
+
+# Construct the matrix to inspect
+Auu = initialize_matrix(arch, u, u, compute_Auu!)
+Auu
+
+
+a=1
+
+#=
 # grid = RectilinearGrid(arch,
 #                        size = Nx,
 #                        x = (-1, 1),
@@ -249,5 +281,6 @@ cg!(φ_plain_cg, [A 0A; 0A A], [collect(r[1:Nx, 1, 1]); collect(r[1:Nx, 1, 1])])
 
 lines(φ_plain_cg, color=:red, label="iter")
 current_figure()
+=#
 =#
 =#
