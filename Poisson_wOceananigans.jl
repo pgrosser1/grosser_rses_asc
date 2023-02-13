@@ -29,6 +29,11 @@ g = 9.8
 H = 100
 f = 0.5
 
+function make_output_column(f)
+    Nx, Ny, Nz = size(f)
+    return reshape(interior(f), Nx*Ny*Nz) # interior (Oceananigans) = without halos
+end
+
 
 function initialize_matrix(::CPU, template_output_field, template_input_field, linear_operator!, args...)
 
@@ -40,7 +45,6 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
     
     A = spzeros(eltype(grid), Nxₒᵤₜ*Nyₒᵤₜ*Nzₒᵤₜ, Nxᵢₙ*Nyᵢₙ*Nzᵢₙ)
 
-    make_output_column(f) = reshape(interior(f), Nxₒᵤₜ*Nyₒᵤₜ*Nzₒᵤₜ)
 
     eᵢⱼₖ = similar(template_input_field)
     Aeᵢⱼₖ = similar(template_output_field)
@@ -49,7 +53,9 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
         parent(eᵢⱼₖ) .= 0
         parent(Aeᵢⱼₖ) .= 0
         eᵢⱼₖ[i, j, k] = 1
+        @show eᵢⱼₖ[1:5, 1, 1]
         fill_halo_regions!(eᵢⱼₖ)
+        @show eᵢⱼₖ[1:5, 1, 1]
         linear_operator!(Aeᵢⱼₖ, eᵢⱼₖ, args...)
 
         A[:, Nyᵢₙ*Nxᵢₙ*(k-1) + Nxᵢₙ*(j-1) + i] .= make_output_column(Aeᵢⱼₖ)
@@ -222,9 +228,9 @@ end
 
 # Now let's construct a grid and play around
 arch = CPU()
-Nx = 4
-Ny = 1
 
+Nx = 4
+Ny = 3
 
 grid = RectilinearGrid(arch,
                        size = (Nx, Ny, 1),
@@ -287,11 +293,13 @@ boundary_conditions = FieldBoundaryConditions(grid, loc,
                                               west = OpenBoundaryCondition(0),
                                               east = OpenBoundaryCondition(0))
 v = Field(loc, grid; boundary_conditions)
+#v = v[1:Nx,0:(Ny + 2),0:2]
 
 η = CenterField(grid)
 
 # Construct the matrix to inspect
 Auu = initialize_matrix(arch, u, u, compute_Auu!)
+# Auu = initialize_matrix(arch, u[0:(Nx + 2),1:Ny,0:2], u[0:(Nx + 2),1:Ny,0:2], compute_Auu!)
 Auv = initialize_matrix(arch, u, v, compute_Auv!)
 Auη = initialize_matrix(arch, u, η, compute_Auη!)
 Avu = initialize_matrix(arch, v, u, compute_Avu!)
@@ -301,9 +309,12 @@ Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
 Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
 Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
-#=
-A = [ Auu  Auv Auη;]
-# @show eigvals(collect(A))
+
+A = [ Auu  Auv Auη;
+Avu  Avv Avη;
+Aηu  Aηv Aηη;]
+
+@show eigvals(collect(A))
 
 
 
