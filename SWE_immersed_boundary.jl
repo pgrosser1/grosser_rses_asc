@@ -28,6 +28,7 @@ Makie.inline!(true)
 g = 9.8
 f = 0.5
 H = 100 # maximum depth
+ω = 5
 
 
 function initialize_matrix(::CPU, template_output_field, template_input_field, linear_operator!, args...)
@@ -59,17 +60,13 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
         if peripheral_node(i, j, k, grid, loc[1](), loc[2](), loc[3]())
             parent(Aeᵢⱼₖ) .= 0
             Aeᵢⱼₖ[i, j, k] = 1
-        end # Making all the peripheral points 1 (so 1*u_peripheral = 0)
+        end # Making all the peripheral points 1 (so 1*u_peripheral = 0, with 0 on the RHS and u_peripheral might be u_3 etc. -> just some u node)
 
         A[:, Nyᵢₙ*Nxᵢₙ*(k-1) + Nxᵢₙ*(j-1) + i] .= make_output_column(Aeᵢⱼₖ)
     end
     
     return A
 end
-
-Auu = initialize_matrix(arch, u, u, compute_Auu!)
-Auv = initialize_matrix(arch, u, v, compute_Auv!)
-Auη = initialize_matrix(arch, u, η, compute_Auη!)
 
 # Ensure that boundary conditions to pass along when we create fields using similar()
 function Base.similar(f::Field, grid=f.grid)
@@ -134,10 +131,24 @@ v = Field(loc, grid)
 
 # Construct the matrix to inspect
 Auu = initialize_matrix(arch, u, u, compute_Auu!)
-Auu
+Auv = initialize_matrix(arch, u, v, compute_Auv!)
+Auη = initialize_matrix(arch, u, η, compute_Auη!)
+Avu = initialize_matrix(arch, v, u, compute_Avu!)
+Avv = initialize_matrix(arch, v, v, compute_Avv!)
+Avη = initialize_matrix(arch, v, η, compute_Avη!)
+Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
+Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
+Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
+# Add an i omega matrix to Auu, Avv, Aetaeta
+Auu_iom = Auu .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
+Avv_iom = Avv .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
+Aηη_iom = Aηη .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
 
-a=1
+A = [ Auu_iom  Auv Auη; Avu Avv_iom Avη; Aηu Aηv Aηη_iom]
+@show eigvals(collect(A))
+A = collect(A)
+inv(A)
 
 #=
 # grid = RectilinearGrid(arch,
