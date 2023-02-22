@@ -47,9 +47,7 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
     eᵢⱼₖ = similar(template_input_field)
     Aeᵢⱼₖ = similar(template_output_field)
 
-    iter = 0
     for k = 1:Nzᵢₙ, j in 1:Nyᵢₙ, i in 1:Nxᵢₙ
-        @show iter += 1 
         parent(eᵢⱼₖ) .= 0
         parent(Aeᵢⱼₖ) .= 0
         eᵢⱼₖ[i, j, k] = 1
@@ -145,153 +143,21 @@ Auu_iom = Auu .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
 Avv_iom = Avv .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
 Aηη_iom = Aηη .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
 
-A = [ Auu_iom  Auv Auη; Avu Avv_iom Avη; Aηu Aηv Aηη_iom]
+A = [ Auu_iom   Auv     Auη;
+        Avv   Avv_iom   Avη;
+        Aηu     Aηv   Aηη_iom]
+
 @show eigvals(collect(A))
-A = collect(A)
-inv(A)
+Ainverse = inv(collect(A))
 
-#=
-# grid = RectilinearGrid(arch,
-#                        size = Nx,
-#                        x = (-1, 1),
-#                        topology = (Bounded, Flat, Flat))
+b_test = ones(Complex{Float64}, Nx*Ny*3,)
 
+x_truth = Ainverse*b_test
 
+x_iterative = zeros(Complex{Float64}, Nx*Ny*3,)
 
-loc = (Center, Center, Center)
-boundary_conditions = FieldBoundaryConditions(grid, loc,
-                                              west = ValueBoundaryCondition(0),
-                                              east = GradientBoundaryCondition(0))
+idrs!(x_iterative, A, b_test)
 
+@show x_iterative
 
-σ = 8
-
-# a symetric solution with zero mean for φ(-1) = φ(+1)=0
-rhs(x, y, z) = x * exp(-σ^2 * x^2)
-φ(x, y, z) = √π * (x * erf(σ) - erf(σ * x)) / 4σ^3
-
-# an assymetric solution for φ(-1) = φ(+1)=0
-rhs(x, y, z) = (x - 1/4) * exp(- σ^2 * (x - 1/4)^2)
-φ(x, y, z) = √π * ((1 + x) * erf(3σ / 4) + (x - 1) * erf(5σ / 4) + 2erf(σ/4 - x * σ)) / 8σ^3
-
-# a symetric solution with zero mean for φ'(-1) = φ'(+1)=0
-# rhs(x, y, z) = x * exp(-σ^2 * x^2)
-# φ(x, y, z) = x * exp(-σ^2) / 2σ^2 - √π * erf(x * σ) / 4σ^3
-
-# Solve ∇²φ = r
-
-# The true solution
-φ_truth = CenterField(grid; boundary_conditions)
-
-# Initialize
-set!(φ_truth, φ)
-
-# Ensure the boundary conditions are correct
-fill_halo_regions!(φ_truth)
-
-
-# The right-hand-side
-r = CenterField(grid)
-set!(r, rhs)
-fill_halo_regions!(r)
-
-loc = (Face, Center, Center)
-boundary_conditions = FieldBoundaryConditions(grid, loc,
-                                              west = OpenBoundaryCondition(0),
-                                              east = OpenBoundaryCondition(0))
-u = Field(loc, grid; boundary_conditions)
-
-loc = (Center, Face, Center)
-boundary_conditions = FieldBoundaryConditions(grid, loc,
-                                              west = OpenBoundaryCondition(0),
-                                              east = OpenBoundaryCondition(0))
-v = Field(loc, grid; boundary_conditions)
-
-η = CenterField(grid)
-
-# Construct the matrix to inspect
-Auu = initialize_matrix(arch, u, u, compute_Auu!)
-Auv = initialize_matrix(arch, u, v, compute_Auv!)
-Auη = initialize_matrix(arch, u, η, compute_Auη!)
-Avu = initialize_matrix(arch, v, u, compute_Avu!)
-Avv = initialize_matrix(arch, v, v, compute_Avv!)
-Avη = initialize_matrix(arch, v, η, compute_Avη!)
-Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
-Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
-Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
-
-#=
-A = [ Auu  Auv Auη;]
-# @show eigvals(collect(A))
-
-
-
-# Now solve numerically via MG or CG solvers
-
-# the solution via the MG solver
-φ_mg = CenterField(grid; boundary_conditions)
-φ_mg = CenterField(grid,  boundary_conditions = boundary_conditions)
-
-@info "Constructing an Algebraic Multigrid solver..."
-@time mgs = MultigridSolver(compute_∇²!, template_field=φ_mg)
-
-@info "Solving with the Algebraic Multigrid solver..."
-@time solve!(φ_mg, mgs, r)
-fill_halo_regions!(φ_mg)
-
-
-# the solution via the CG solver
-φ_cg = CenterField(grid; boundary_conditions)
-
-@info "Constructing a Preconditioned Congugate Gradient solver..."
-@time cg_solver = PreconditionedConjugateGradientSolver(compute_∇²!, template_field=φ_cg, reltol=eps(eltype(grid)))
-
-@info "Solving with the Preconditioned Congugate Gradient solver..."
-@time solve!(φ_cg, cg_solver, r)
-fill_halo_regions!(φ_cg)
-
-
-# Compute the ∇²φ to see how good it matches with the right-hand-side
-∇²φ_cg = CenterField(grid)
-compute_∇²!(∇²φ_cg, φ_cg)
-fill_halo_regions!(∇²φ_cg)
-
-∇²φ_mg = CenterField(grid)
-compute_∇²!(∇²φ_mg, φ_mg)
-fill_halo_regions!(∇²φ_mg)
-
-
-# Now plot
-x, y, z = nodes(r)
-
-fig = Figure()
-ax1 = Axis(fig[1, 1], xlabel="x", ylabel="∇²φ")
-lines!(ax1, x, interior(r,      :, 1, 1), linewidth=6, label="truth")
-lines!(ax1, x, interior(∇²φ_mg, :, 1, 1), linewidth=3, label="MG")
-lines!(ax1, x, interior(∇²φ_cg, :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
-axislegend(ax1)
-
-ax2 = Axis(fig[2, 1], xlabel="x", ylabel="φ")
-lines!(ax2, x, interior(φ_truth, :, 1, 1), linewidth=6, label="truth")
-lines!(ax2, x, interior(φ_mg,    :, 1, 1), linewidth=3, label="MG")
-lines!(ax2, x, interior(φ_cg,    :, 1, 1), linewidth=3, linestyle=:dash, label="CG")
-axislegend(ax2)
-
-max_r = maximum(abs.(r))
-ylims!(ax1, (-1.2*max_r, 1.2max_r))
-current_figure()
-
-φ_plain_cg = zeros(Nx)
-cg!(φ_plain_cg, A, collect(r[1:Nx, 1, 1]))
-
-current_figure()
-
-#=
-φ_plain_cg = zeros(2Nx)
-cg!(φ_plain_cg, [A 0A; 0A A], [collect(r[1:Nx, 1, 1]); collect(r[1:Nx, 1, 1])])
-
-lines(φ_plain_cg, color=:red, label="iter")
-current_figure()
-=#
-=#
-=#
+@show x_iterative ≈ x_truth
