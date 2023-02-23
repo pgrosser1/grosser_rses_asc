@@ -2,6 +2,8 @@ using SparseArrays
 using Statistics
 using SpecialFunctions
 using LinearAlgebra
+using DataDeps
+using JLD2
 
 using Oceananigans
 using Oceananigans.Architectures: architecture, device_event, device
@@ -26,34 +28,35 @@ f = 0.5
 H = 100 # maximum depth
 ω = 5
 
+include("one_degree_inputs.jl")
+# include("create_bathymetry.jl")
+
 include("utilities_to_create_matrix.jl")
 
 include("SWE_matrix_components.jl")
 
 # Now let's construct a grid and play around
 arch = CPU()
-Nx = 4
-Ny = 2
+Nx = 120
+Ny = 50
 Nz = 1
 
-underlying_grid = RectilinearGrid(arch,
-                                  size = (Nx, Ny, Nz),
-                                  x = (-1, 1),
-                                  y = (0, 1),
-                                  z = (-H, 0),
-                                  halo = (1, 1, 1),
-                                  topology = (Periodic, Periodic, Bounded))
+file = jldopen("data/bathymetry_three_degree.jld2")
+bathymetry = file["bathymetry"]
+close(file)
+
+z_faces = z_49_levels_10_to_400_meter_spacing
+
+underlying_grid = LatitudeLongitudeGrid(arch,
+                                        size = (Nx, Ny, Nz),
+                                        longitude = (-180, 180),
+                                        latitude = (-75, 75),
+                                        z = (-H, 0),
+                                        halo = (5, 5, 5),
+                                        topology = (Periodic, Periodic, Bounded))
 # v (y) can be periodic if you make the northern-most and southern-most points 0 (so then periodic is appropriate)
 
-depth = -H .+ zeros(Nx, Ny)
-depth[1, :] .= 10
-depth[Nx, :] .= 10
-# depth[:, 1] .= 10
-# depth[:, Ny] .= 10
-
-depth
-
-grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(depth))
+grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(bathymetry))
 
 using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 
@@ -97,16 +100,12 @@ A = [ Auu_iom   Auv     Auη;
         Avv   Avv_iom   Avη;
         Aηu     Aηv   Aηη_iom]
 
-@show eigvals(collect(A))
-Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
+Ainverse = I / Matrix(A)
 
-# Ax = b
-
-b_test = rand(Complex{Float64}, Nx*Ny*3,)
+b_test = ones(Complex{Float64}, Nx*Ny*3,)
 
 x_truth = Ainverse * b_test
 
-# allocate x
 x = zeros(Complex{Float64}, Nx*Ny*3,)
 
 IterativeSolvers.idrs!(x, A, b_test)
