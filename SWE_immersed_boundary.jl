@@ -48,10 +48,7 @@ underlying_grid = RectilinearGrid(arch,
 depth = -H .+ zeros(Nx, Ny)
 depth[1, :] .= 10
 depth[Nx, :] .= 10
-# depth[:, 1] .= 10
-# depth[:, Ny] .= 10
-
-depth
+@show depth
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(depth))
 
@@ -60,8 +57,6 @@ using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 [!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
 [!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
 [peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
-
-
 
 loc = (Face, Center, Center)
 boundary_conditions = FieldBoundaryConditions(grid, loc,
@@ -97,18 +92,18 @@ A = [ Auu_iom   Auv     Auη;
         Avv   Avv_iom   Avη;
         Aηu     Aηv   Aηη_iom]
 
-@show eigvals(collect(A))
+@show eigvals(Matrix(A))
+
 Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
 
-# Ax = b
-
-b_test = rand(Complex{Float64}, Nx*Ny*3,)
+b_test = randn(Complex{Float64}, Nx*Ny*3)
 
 x_truth = Ainverse * b_test
 
 # allocate x
-x = zeros(Complex{Float64}, Nx*Ny*3,)
+x = zeros(Complex{Float64}, Nx*Ny*3)
 
+# make sure we give sparse A here
 IterativeSolvers.idrs!(x, A, b_test)
 
 @show x
