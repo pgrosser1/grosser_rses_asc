@@ -25,10 +25,9 @@ Makie.inline!(true)
 λ = 0.1
 g = 9.8
 f = 0.5
-H = 100 # maximum depth
 ω = 5
 
-include("one_degree_inputs.jl")
+# include("one_degree_inputs.jl")
 # include("create_bathymetry.jl")
 
 include("utilities_to_create_matrix.jl")
@@ -45,7 +44,7 @@ file = jldopen("data/bathymetry_three_degree.jld2")
 bathymetry = file["bathymetry"]
 close(file)
 
-z_faces = z_49_levels_10_to_400_meter_spacing
+H = abs.(minimum(bathymetry))
 
 underlying_grid = LatitudeLongitudeGrid(arch,
                                         size = (Nx, Ny, Nz),
@@ -63,7 +62,6 @@ using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 [!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
 [!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
 [peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
-
 
 
 loc = (Face, Center, Center)
@@ -91,22 +89,22 @@ Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
 Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
 Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
-# Add an i omega matrix to Auu, Avv, Aetaeta
-Auu_iom = Auu .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
-Avv_iom = Avv .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
-Aηη_iom = Aηη .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
+# Add an iω*1 matrix to Auu, Avv, Aηη
+Auu_iom = Auu .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
+Avv_iom = Avv .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
+Aηη_iom = Aηη .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
 
 A = [ Auu_iom   Auv     Auη;
         Avv   Avv_iom   Avη;
         Aηu     Aηv   Aηη_iom]
 
-Ainverse = I / Matrix(A)
+Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
 
-b_test = ones(Complex{Float64}, Nx*Ny*3,)
+b_test = randn(Complex{Float64}, Nx*Ny*3)
 
 x_truth = Ainverse * b_test
 
-x = zeros(Complex{Float64}, Nx*Ny*3,)
+x = zeros(Complex{Float64}, Nx*Ny*3)
 
 IterativeSolvers.idrs!(x, A, b_test)
 

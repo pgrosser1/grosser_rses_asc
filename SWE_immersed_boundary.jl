@@ -88,10 +88,10 @@ Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
 Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
 Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
-# Add an i omega matrix to Auu, Avv, Aetaeta
-Auu_iom = Auu .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
-Avv_iom = Avv .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
-Aηη_iom = Aηη .+ Matrix(im*ω*I, (Nx*Ny,Nx*Ny))
+# Add an iω*1 matrix to Auu, Avv, Aηη
+Auu_iom = Auu .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
+Avv_iom = Avv .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
+Aηη_iom = Aηη .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
 
 A = [ Auu_iom   Auv     Auη;
         Avv   Avv_iom   Avη;
