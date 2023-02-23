@@ -106,6 +106,7 @@ x_truth = Ainverse * b_test
 
 x = zeros(Complex{Float64}, Nx*Ny*3)
 
+# make sure we give sparse A here
 IterativeSolvers.idrs!(x, A, b_test)
 
 @show x
