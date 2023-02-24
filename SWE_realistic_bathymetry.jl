@@ -26,6 +26,7 @@ Makie.inline!(true)
 g = 9.8
 f = 0.5
 ω = 5
+Ω = 2*π/(24*3600) # Rotation of the earth
 
 # include("one_degree_inputs.jl")
 # include("create_bathymetry.jl")
@@ -40,11 +41,14 @@ Nx = 120
 Ny = 50
 Nz = 1
 
-file = jldopen("data/bathymetry_three_degree.jld2")
+# Bathymetry
+file = jldopen("data/bathymetry_three_degree.jld2") # ie. three degrees of resolution (360/3 = 120 degrees x, 150/3 = 50 degrees y)
 bathymetry = file["bathymetry"]
 close(file)
 
 H = abs.(minimum(bathymetry))
+H_vector = zeros(Nx,Ny)
+[H_vector[i, j] = -1*bathymetry[i,j] for i in 1:Nx, j in 1:Ny]
 
 underlying_grid = LatitudeLongitudeGrid(arch,
                                         size = (Nx, Ny, Nz),
@@ -57,12 +61,15 @@ underlying_grid = LatitudeLongitudeGrid(arch,
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(bathymetry))
 
+latitude_vector = [-75.0:3.0:(75.0 - 3.0);]
+f_vector = zeros(length(latitude_vector))
+[f_vector[i] = 2*Ω.*sind(latitude_vector[i]) for i in 1:length(latitude_vector)]
+
 using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 
 [!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
-[!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
+[!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz] # Inactive for u grid
 [peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
-
 
 loc = (Face, Center, Center)
 boundary_conditions = FieldBoundaryConditions(grid, loc,

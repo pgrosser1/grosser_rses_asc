@@ -38,7 +38,7 @@ function initialize_matrix(::CPU, template_output_field, template_input_field, l
         linear_operator!(Aeᵢⱼₖ, eᵢⱼₖ, args...)
         # @show peripheral_node(i, j, k, grid, loc[1](), loc[2](), loc[3]())
         
-        if peripheral_node(i, j, k, grid, loc[1](), loc[2](), loc[3]())
+        if peripheral_node(i, j, k, grid, loc[1](), loc[2](), loc[3]()) #ie. Face, Centre, Centre for template_output_field
             parent(Aeᵢⱼₖ) .= 0
             Aeᵢⱼₖ[i, j, k] = 1
         end # Making all the peripheral points 1 (so 1*u_peripheral = 0, with 0 on the RHS and u_peripheral might be u_3 etc. -> just some u node)
