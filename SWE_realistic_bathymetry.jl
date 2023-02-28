@@ -10,7 +10,7 @@ using Oceananigans.Architectures: architecture, device_event, device
 using Oceananigans.Utils: launch!
 using Oceananigans.BoundaryConditions: fill_halo_regions!
 using Oceananigans.Operators
-using Oceananigans.Grids: new_data
+using Oceananigans.Grids: new_data, xnode, ynode, xnodes, ynodes
 using Oceananigans.Solvers: solve!,
                             PreconditionedConjugateGradientSolver,
                             MultigridSolver
@@ -61,11 +61,6 @@ underlying_grid = LatitudeLongitudeGrid(arch,
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(bathymetry))
 
-# Latitude is θ. f_vector needs to live on FCC for Auv, CFC for Avu
-latitude_vector = [-75.0:3.0:(75.0 - 3.0);] # Only the case for Auv
-f_vector = zeros(length(latitude_vector))
-[f_vector[i] = 2*Ω.*sind(latitude_vector[i]) for i in 1:length(latitude_vector)]
-
 using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 
 [!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
@@ -87,15 +82,30 @@ v = Field(loc, grid)
 η = CenterField(grid)
 
 # Right-hand sides
+lv = 0.736
+
 # For RHS_u, λ must be on the faces, ϕ must be on the centers (via construction of the u field)
-λ = [-180:3.0:(180-3);]
-ϕ = [-75:3.0:(75.0-3.0);].+1.5
-RHS_u = 
+λ_u = xnodes(Face, grid)
+ϕ_u = ynodes(Center, grid)
+RHS_u = complex(zeros(size(grid)))
+# grid is Nx by Ny
+for i in 1:length(λ_u)
+        for j in 1:length(ϕ_u)
+                RHS_u[i, j] = g*1/(R*cosd(ϕ_u[j]))*(-2*im*π)*lv*0.242334*cosd(ϕ_u[j])^2*exp(-2*π*im*λ_u[i])
+        end
+end # All the values are tiny!
 
 # For RHS_v, λ must be on the centers, ϕ must be on the faces (via construction of the v field)
-RHS_v = 
+λ_v = xnodes(Center, grid)
+ϕ_v = ynodes(Face, grid)
+RHS_v = complex(zeros(size(grid)))
+for i in 1:length(λ_v)
+        for j in 1:length(ϕ_v)
+                RHS_v[i, j] = g*1/R*(-2*im*π)*lv*0.242334*cosd(ϕ_v[j])^2*exp(-2*π*im*λ_v[i])
+        end
+end # Again, very tiny values
 
-RHS_η = zeros(Nx*Ny)
+RHS_η = zeros(size(grid))
 
 # Construct the matrix to inspect
 Auu = initialize_matrix(arch, u, u, compute_Auu!)

@@ -109,6 +109,7 @@ end
 
 @kernel function Auv!(Auvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
+    f = 2*Ω*sind(ynode(Center(),j,grid)) # For the u environment, f (dependent on y node, which is on center) needs to be on the center
     @inbounds Auvφ[i, j, k] = - f * ℑxyᶠᶜᵃ(i, j, k, grid, φ)
 end # Interpolation needed as v is cfc -> needs to become fcc for u environment
 
@@ -119,6 +120,7 @@ end # Interpolation not neccessary as ∂x turns η's x,y,z = ccc environment in
 
 @kernel function Avu!(Avuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
+    f = 2*Ω*sind(ynode(Face(),j,grid)) # For the v environment, f (dependent on y node, which is on face) needs to be on the face (as y is on face)
     @inbounds Avuφ[i, j, k] = -f * ℑxyᶜᶠᵃ(i, j, k, grid, φ)
 end
 
