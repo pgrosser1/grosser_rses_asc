@@ -22,11 +22,11 @@ using KernelAbstractions: @kernel, @index
 using GLMakie
 Makie.inline!(true)
 
-λ = 0.1
+λ = 0.2 #1/5(secs)
 g = 9.8
-f = 0.5
 ω = 5
 Ω = 2*π/(24*3600) # Rotation of the earth
+R = 6.38*10^6 # Radius of the earth
 
 # include("one_degree_inputs.jl")
 # include("create_bathymetry.jl")
@@ -52,8 +52,8 @@ H_vector = zeros(Nx,Ny)
 
 underlying_grid = LatitudeLongitudeGrid(arch,
                                         size = (Nx, Ny, Nz),
-                                        longitude = (-180, 180),
-                                        latitude = (-75, 75),
+                                        longitude = (-180, 180), #λ
+                                        latitude = (-75, 75), #θ in notes, ϕ in Oceananigans
                                         z = (-H, 0),
                                         halo = (5, 5, 5),
                                         topology = (Periodic, Periodic, Bounded))
@@ -61,7 +61,8 @@ underlying_grid = LatitudeLongitudeGrid(arch,
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(bathymetry))
 
-latitude_vector = [-75.0:3.0:(75.0 - 3.0);]
+# Latitude is θ. f_vector needs to live on FCC for Auv, CFC for Avu
+latitude_vector = [-75.0:3.0:(75.0 - 3.0);] # Only the case for Auv
 f_vector = zeros(length(latitude_vector))
 [f_vector[i] = 2*Ω.*sind(latitude_vector[i]) for i in 1:length(latitude_vector)]
 
@@ -84,6 +85,17 @@ boundary_conditions = FieldBoundaryConditions(grid, loc,
 v = Field(loc, grid)
 
 η = CenterField(grid)
+
+# Right-hand sides
+# For RHS_u, λ must be on the faces, ϕ must be on the centers (via construction of the u field)
+λ = [-180:3.0:(180-3);]
+ϕ = [-75:3.0:(75.0-3.0);].+1.5
+RHS_u = 
+
+# For RHS_v, λ must be on the centers, ϕ must be on the faces (via construction of the v field)
+RHS_v = 
+
+RHS_η = zeros(Nx*Ny)
 
 # Construct the matrix to inspect
 Auu = initialize_matrix(arch, u, u, compute_Auu!)
