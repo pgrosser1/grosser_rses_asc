@@ -50,6 +50,8 @@ H = abs.(minimum(bathymetry))
 H_vector = zeros(Nx,Ny)
 [H_vector[i, j] = -1*bathymetry[i,j] for i in 1:Nx, j in 1:Ny]
 
+heatmap(H_vector)
+
 underlying_grid = LatitudeLongitudeGrid(arch,
                                         size = (Nx, Ny, Nz),
                                         longitude = (-180, 180), #λ
@@ -66,6 +68,14 @@ using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 [!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
 [!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz] # Inactive for u grid
 [peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
+
+land_ocean = [!peripheral_node(i, j, k, grid, Center(), Center(), Center()) for i=1:Nx, j=1:Ny, k=1:Nz]
+
+fig = Figure()
+ax = Axis(fig[1, 1])
+hm = heatmap!(ax, land_ocean[:,:,1])
+Colorbar(fig[1, 2], hm)
+fig
 
 loc = (Face, Center, Center)
 boundary_conditions = FieldBoundaryConditions(grid, loc,
@@ -91,9 +101,10 @@ RHS_u = complex(zeros(size(grid)))
 # grid is Nx by Ny
 for i in 1:length(λ_u)
         for j in 1:length(ϕ_u)
-                RHS_u[i, j] = g*1/(R*cosd(ϕ_u[j]))*(-2*im*π)*lv*0.242334*cosd(ϕ_u[j])^2*exp(-2*π*im*λ_u[i])
+                RHS_u[i, j] = g/(R*cosd(ϕ_u[j]))*(-2*im*pi/180)*lv*0.242334*cosd(ϕ_u[j])^2*exp(-2*im*deg2rad(λ_u[i]))
         end
-end # All the values are tiny!
+end
+# Factor of pi/180 comes from taking the derivative of a value in degrees
 
 # For RHS_v, λ must be on the centers, ϕ must be on the faces (via construction of the v field)
 λ_v = xnodes(Center, grid)
@@ -101,11 +112,13 @@ end # All the values are tiny!
 RHS_v = complex(zeros(size(grid)))
 for i in 1:length(λ_v)
         for j in 1:length(ϕ_v)
-                RHS_v[i, j] = g*1/R*(-2*im*π)*lv*0.242334*cosd(ϕ_v[j])^2*exp(-2*π*im*λ_v[i])
+                RHS_v[i, j] = -g*1/R*lv*0.242334*(2*pi/180)*cosd(ϕ_v[j])*sind(ϕ_v[j])*exp(-2*im*deg2rad(λ_v[i]))
         end
-end # Again, very tiny values
+end
 
 RHS_η = zeros(size(grid))
+
+heatmap(λ_u, ϕ_u, real.(RHS_u[:,:,1]))
 
 # Construct the matrix to inspect
 Auu = initialize_matrix(arch, u, u, compute_Auu!)
@@ -129,6 +142,11 @@ A = [ Auu_iom   Auv     Auη;
 
 Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
 
+RHS_u = reshape(RHS_u, (Nx*Ny,1))
+RHS_v = reshape(RHS_v, (Nx*Ny,1))
+RHS_η = reshape(RHS_η, (Nx*Ny,1))
+RHS = [RHS_u; RHS_v; RHS_η]
+
 b_test = randn(Complex{Float64}, Nx*Ny*3)
 
 x_truth = Ainverse * b_test
@@ -136,7 +154,23 @@ x_truth = Ainverse * b_test
 x = zeros(Complex{Float64}, Nx*Ny*3)
 
 # make sure we give sparse A here
-IterativeSolvers.idrs!(x, A, b_test)
+IterativeSolvers.idrs!(x, A, RHS)
+
+u_soln = x[1:(Nx*Ny)]
+u_soln = reshape(u_soln, (Nx,Ny))
+v_soln = x[(Nx*Ny + 1):(2*Nx*Ny)]
+v_soln = reshape(v_soln, (Nx,Ny))
+η_soln = x[(2*Nx*Ny + 1):(3*Nx*Ny)]
+η_soln = reshape(η_soln, (Nx,Ny))
+
+fig = Figure()
+ax = Axis(fig[1, 1])
+hm = heatmap!(ax, real.(η_soln)  .* land_ocean[:, :, 1])
+Colorbar(fig[1, 2], hm)
+fig
+
+heatmap(real.(u_soln))
+heatmap(real.(v_soln))
 
 @show x
 

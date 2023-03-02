@@ -32,8 +32,8 @@ include("SWE_matrix_components.jl")
 
 # Now let's construct a grid and play around
 arch = CPU()
-Nx = 4
-Ny = 2
+Nx = 12
+Ny = 8
 Nz = 1
 
 underlying_grid = RectilinearGrid(arch,
@@ -48,6 +48,7 @@ underlying_grid = RectilinearGrid(arch,
 depth = -H .+ zeros(Nx, Ny)
 depth[1, :] .= 10
 depth[Nx, :] .= 10
+depth[3, 2:3] .= 10
 @show depth
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(depth))
@@ -105,6 +106,19 @@ x = zeros(Complex{Float64}, Nx*Ny*3)
 
 # make sure we give sparse A here
 IterativeSolvers.idrs!(x, A, b_test)
+
+u_soln = x[1:(Nx*Ny)]
+u_soln = reshape(u_soln, (Nx,Ny))
+v_soln = x[(Nx*Ny + 1):(2*Nx*Ny)]
+v_soln = reshape(v_soln, (Nx,Ny))
+η_soln = x[(2*Nx*Ny + 1):(3*Nx*Ny)]
+η_soln = reshape(η_soln, (Nx,Ny))
+
+fig = Figure()
+ax = Axis(fig[1, 1])
+hm = heatmap!(ax, real.(η_soln))
+Colorbar(fig[1, 2], hm)
+fig
 
 @show x
 
