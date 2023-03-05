@@ -8,7 +8,7 @@ using Oceananigans.Architectures: architecture, device_event, device
 using Oceananigans.Utils: launch!
 using Oceananigans.BoundaryConditions: fill_halo_regions!
 using Oceananigans.Operators
-using Oceananigans.Grids: new_data
+using Oceananigans.Grids: new_data, xnode, ynode, xnodes, ynodes
 using Oceananigans.Solvers: solve!,
                             PreconditionedConjugateGradientSolver,
                             MultigridSolver
@@ -25,6 +25,8 @@ g = 9.8
 f = 0.5
 H = 100 # maximum depth
 ω = 5
+Ω = 2*π/(24*3600)
+R = 6.38*10^6
 
 include("utilities_to_create_matrix.jl")
 
@@ -32,8 +34,8 @@ include("SWE_matrix_components.jl")
 
 # Now let's construct a grid and play around
 arch = CPU()
-Nx = 12
-Ny = 8
+Nx = 50
+Ny = 40
 Nz = 1
 
 underlying_grid = RectilinearGrid(arch,
@@ -50,6 +52,9 @@ depth[1, :] .= 10
 depth[Nx, :] .= 10
 depth[3, 2:3] .= 10
 @show depth
+
+H_vector = zeros(Nx,Ny)
+[H_vector[i, j] = depth[i,j] for i in 1:Nx, j in 1:Ny]
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(depth))
 
@@ -97,15 +102,18 @@ A = [ Auu_iom   Auv     Auη;
 
 Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
 
-b_test = randn(Complex{Float64}, Nx*Ny*3)
+btest = randn(Complex{Float64}, Nx*Ny*3)
 
-x_truth = Ainverse * b_test
+x_truth = Ainverse * btest
 
 # allocate x
 x = zeros(Complex{Float64}, Nx*Ny*3)
 
 # make sure we give sparse A here
 IterativeSolvers.idrs!(x, A, b_test)
+
+# Error might be to do with how the solution is ordered in the x coloumn 
+
 
 u_soln = x[1:(Nx*Ny)]
 u_soln = reshape(u_soln, (Nx,Ny))

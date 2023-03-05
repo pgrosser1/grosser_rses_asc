@@ -70,6 +70,7 @@ using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 [peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
 
 land_ocean = [!peripheral_node(i, j, k, grid, Center(), Center(), Center()) for i=1:Nx, j=1:Ny, k=1:Nz]
+# Will give 1 for active node, 0 for inactive/peripheral node
 
 fig = Figure()
 ax = Axis(fig[1, 1])
@@ -104,6 +105,18 @@ for i in 1:length(λ_u)
                 RHS_u[i, j] = g/(R*cosd(ϕ_u[j]))*(-2*im*pi/180)*lv*0.242334*cosd(ϕ_u[j])^2*exp(-2*im*deg2rad(λ_u[i]))
         end
 end
+
+# Set the RHS to 0 for peripheral and inactive cells
+for i = 1:Nx
+        for j = 1:Ny
+                for k = 1:Nz
+                        if peripheral_node(i, j, k, grid, Face(), Center(), Center())
+                                RHS_u[i, j, k] = 0
+                        end
+                end
+        end
+end
+
 # Factor of pi/180 comes from taking the derivative of a value in degrees
 
 # For RHS_v, λ must be on the centers, ϕ must be on the faces (via construction of the v field)
@@ -115,6 +128,18 @@ for i in 1:length(λ_v)
                 RHS_v[i, j] = -g*1/R*lv*0.242334*(2*pi/180)*cosd(ϕ_v[j])*sind(ϕ_v[j])*exp(-2*im*deg2rad(λ_v[i]))
         end
 end
+
+# Set the RHS to 0 for peripheral and inactive cells
+for i = 1:Nx
+        for j = 1:Ny
+                for k = 1:Nz
+                        if peripheral_node(i, j, k, grid, Center(), Face(), Center())
+                                RHS_v[i, j, k] = 0
+                        end
+                end
+        end
+end
+
 
 RHS_η = zeros(size(grid))
 
@@ -140,16 +165,15 @@ A = [ Auu_iom   Auv     Auη;
         Avv   Avv_iom   Avη;
         Aηu     Aηv   Aηη_iom]
 
-Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
+#Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
 
 RHS_u = reshape(RHS_u, (Nx*Ny,1))
 RHS_v = reshape(RHS_v, (Nx*Ny,1))
 RHS_η = reshape(RHS_η, (Nx*Ny,1))
 RHS = [RHS_u; RHS_v; RHS_η]
 
-b_test = randn(Complex{Float64}, Nx*Ny*3)
-
-x_truth = Ainverse * b_test
+#b_test = randn(Complex{Float64}, Nx*Ny*3)
+#x_truth = Ainverse * b_test
 
 x = zeros(Complex{Float64}, Nx*Ny*3)
 
