@@ -72,11 +72,12 @@ using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
 land_ocean = [!peripheral_node(i, j, k, grid, Center(), Center(), Center()) for i=1:Nx, j=1:Ny, k=1:Nz]
 # Will give 1 for active node, 0 for inactive/peripheral node
 
-fig = Figure()
-ax = Axis(fig[1, 1])
-hm = heatmap!(ax, land_ocean[:,:,1])
-Colorbar(fig[1, 2], hm)
-fig
+# Ensure the value of peripheral_node is correct
+#fig = Figure()
+#ax = Axis(fig[1, 1])
+#hm = heatmap!(ax, land_ocean[:,:,1])
+#Colorbar(fig[1, 2], hm)
+#fig
 
 loc = (Face, Center, Center)
 boundary_conditions = FieldBoundaryConditions(grid, loc,
@@ -196,6 +197,8 @@ fig
 heatmap(real.(u_soln))
 heatmap(real.(v_soln))
 
-@show x
+RHS_soln = A * x
+@show RHS_soln ≈ RHS
 
-@show x ≈ x_truth
+
+#@show x ≈ x_truth
