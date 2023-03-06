@@ -104,12 +104,15 @@ end
 
 @kernel function Auu!(Auuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    @inbounds Auuφ[i, j, k] = λ * φ[i, j, k]
+    # depth = grid.immersed_boundary.bottom_height[i, j]
+    # drag_coefficient = ifelse(depth > -2000 && depth < 0, λ, 0) / abs(depth)
+    drag_coefficient = 0.2
+    @inbounds Auuφ[i, j, k] = drag_coefficient * φ[i, j, k]
 end
 
 @kernel function Auv!(Auvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    f = 2*Ω*sind(ynode(Center(),j,grid)) # For the u environment, f (dependent on y node, which is on center) needs to be on the center
+    f = 2Ω * sind(ynode(Center(), j, grid)) # For the u environment, f (dependent on y node, which is on center) needs to be on the center
     @inbounds Auvφ[i, j, k] = - f * ℑxyᶠᶜᵃ(i, j, k, grid, φ)
 end # Interpolation needed as v is cfc -> needs to become fcc for u environment
 
@@ -120,13 +123,16 @@ end # Interpolation not neccessary as ∂x turns η's x,y,z = ccc environment in
 
 @kernel function Avu!(Avuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    f = 2*Ω*sind(ynode(Face(),j,grid)) # For the v environment, f (dependent on y node, which is on face) needs to be on the face (as y is on face)
+    f = 2Ω * sind(ynode(Face(), j, grid)) # For the v environment, f (dependent on y node, which is on face) needs to be on the face (as y is on face)
     @inbounds Avuφ[i, j, k] = -f * ℑxyᶜᶠᵃ(i, j, k, grid, φ)
 end
 
 @kernel function Avv!(Avvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    @inbounds Avvφ[i, j, k] = λ * φ[i, j, k]
+    # depth = grid.immersed_boundary.bottom_height[i, j]
+    # drag_coefficient = ifelse(depth > -2000 && depth < 0, λ, 0) / abs(depth)
+    drag_coefficient = 0.2
+    @inbounds Avvφ[i, j, k] = drag_coefficient * φ[i, j, k]
 end
 
 @kernel function Avη!(Avηφ, grid, φ)
@@ -136,12 +142,16 @@ end
 
 @kernel function Aηu!(Aηuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    @inbounds Aηuφ[i, j, k] = H_vector[i, j] * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
+    depth = grid.immersed_boundary.bottom_height[i, j]
+    H = ifelse(depth<0, -depth, 0)
+    @inbounds Aηuφ[i, j, k] = H * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
 end
 
 @kernel function Aηv!(Aηvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    @inbounds Aηvφ[i, j, k] = H_vector[i, j] * ∂yᶜᶜᶜ(i, j, k, grid, φ)
+    depth = grid.immersed_boundary.bottom_height[i, j]
+    H = ifelse(depth<0, -depth, 0)
+    @inbounds Aηvφ[i, j, k] = H * ∂yᶜᶜᶜ(i, j, k, grid, φ)
 end
 
 @kernel function Aηη!(Aηηφ, grid, φ)
