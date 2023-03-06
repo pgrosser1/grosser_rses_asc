@@ -31,6 +31,7 @@ R = R_Earth # Radius of the Earth
 
 λ = 0.2 #1/5(secs)
 ω = 0.7292117e-4 
+ω = 5
 
 # include("one_degree_inputs.jl")
 # include("create_bathymetry.jl")
@@ -196,6 +197,8 @@ RHS = [reshape(RHS_u, (Nx*Ny, 1));
 
 x = zeros(Complex{eltype(grid)}, Nx*Ny*3)
 
+x = zeros(Complex{Float64}, Nx*Ny*3)
+
 # make sure we give sparse A here
 IterativeSolvers.idrs!(x, A, RHS)
 
@@ -224,6 +227,6 @@ hmη = heatmap!(axη, real.(η_soln))
 Colorbar(fig[3, 2], hmη)
 fig
 
-# Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
+# Ainverse = I / Matrix(A)
 # x_truth = Ainverse * RHS
 # @show x ≈ x_truth

@@ -144,14 +144,14 @@ end
     i, j, k = @index(Global, NTuple)
     depth = grid.immersed_boundary.bottom_height[i, j]
     H = ifelse(depth<0, -depth, 0)
-    @inbounds Aηuφ[i, j, k] = H * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
+    @inbounds Aηuφ[i, j, k] = H * 0.91 * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
 end
 
 @kernel function Aηv!(Aηvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
     depth = grid.immersed_boundary.bottom_height[i, j]
     H = ifelse(depth<0, -depth, 0)
-    @inbounds Aηvφ[i, j, k] = H * ∂yᶜᶜᶜ(i, j, k, grid, φ)
+    @inbounds Aηvφ[i, j, k] = H * 0.91 * ∂yᶜᶜᶜ(i, j, k, grid, φ)
 end
 
 @kernel function Aηη!(Aηηφ, grid, φ)
