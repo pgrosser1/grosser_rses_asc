@@ -136,12 +136,16 @@ end
 
 @kernel function Aηu!(Aηuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    @inbounds Aηuφ[i, j, k] = H_vector[i, j] * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
+    depth = grid.immersed_boundary.bottom_height[i, j]
+    H = ifelse(depth<0, -depth, 0)
+    @inbounds Aηuφ[i, j, k] = H * 0.91 * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
 end
 
 @kernel function Aηv!(Aηvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    @inbounds Aηvφ[i, j, k] = H_vector[i, j] * ∂yᶜᶜᶜ(i, j, k, grid, φ)
+    depth = grid.immersed_boundary.bottom_height[i, j]
+    H = ifelse(depth<0, -depth, 0)
+    @inbounds Aηvφ[i, j, k] = H * 0.91 * ∂yᶜᶜᶜ(i, j, k, grid, φ)
 end
 
 @kernel function Aηη!(Aηηφ, grid, φ)

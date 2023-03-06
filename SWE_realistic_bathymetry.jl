@@ -24,6 +24,7 @@ Makie.inline!(true)
 
 λ = 0.2 #1/5(secs)
 g = 9.8
+#ω = 0.7292117*10^(-4)
 ω = 5
 Ω = 2*π/(24*3600) # Rotation of the earth
 R = 6.38*10^6 # Radius of the earth
@@ -166,7 +167,7 @@ A = [ Auu_iom   Auv     Auη;
         Avv   Avv_iom   Avη;
         Aηu     Aηv   Aηη_iom]
 
-#Ainverse = I / Matrix(A) # more efficient way to compute inv(A)
+#Ainverse = I / Matrix(A)
 
 RHS_u = reshape(RHS_u, (Nx*Ny,1))
 RHS_v = reshape(RHS_v, (Nx*Ny,1))
@@ -174,7 +175,8 @@ RHS_η = reshape(RHS_η, (Nx*Ny,1))
 RHS = [RHS_u; RHS_v; RHS_η]
 
 #b_test = randn(Complex{Float64}, Nx*Ny*3)
-#x_truth = Ainverse * b_test
+
+x_truth = Ainverse * RHS
 
 x = zeros(Complex{Float64}, Nx*Ny*3)
 
@@ -190,7 +192,7 @@ v_soln = reshape(v_soln, (Nx,Ny))
 
 fig = Figure()
 ax = Axis(fig[1, 1])
-hm = heatmap!(ax, real.(η_soln)  .* land_ocean[:, :, 1])
+hm = heatmap!(ax, real.(η_soln))
 Colorbar(fig[1, 2], hm)
 fig
 
@@ -199,6 +201,6 @@ heatmap(real.(v_soln))
 
 RHS_soln = A * x
 @show RHS_soln ≈ RHS
-
+@show x ≈ x_truth
 
 #@show x ≈ x_truth
