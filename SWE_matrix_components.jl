@@ -104,9 +104,8 @@ end
 
 @kernel function Auu!(Auuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    # depth = grid.immersed_boundary.bottom_height[i, j]
-    # drag_coefficient = ifelse(depth > -2000 && depth < 0, λ, 0) / abs(depth)
-    drag_coefficient = 0.2
+    depth = grid.immersed_boundary.bottom_height[i, j]
+    drag_coefficient = ifelse(depth > -2000 && depth < 0, 0.1, 0) / abs(depth)
     @inbounds Auuφ[i, j, k] = drag_coefficient * φ[i, j, k]
 end
 
@@ -129,9 +128,8 @@ end
 
 @kernel function Avv!(Avvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
-    # depth = grid.immersed_boundary.bottom_height[i, j]
-    # drag_coefficient = ifelse(depth > -2000 && depth < 0, λ, 0) / abs(depth)
-    drag_coefficient = 0.2
+    depth = grid.immersed_boundary.bottom_height[i, j]
+    drag_coefficient = ifelse(depth > -2000 && depth < 0, 0.1, 0) / abs(depth)
     @inbounds Avvφ[i, j, k] = drag_coefficient * φ[i, j, k]
 end
 
@@ -144,14 +142,14 @@ end
     i, j, k = @index(Global, NTuple)
     depth = grid.immersed_boundary.bottom_height[i, j]
     H = ifelse(depth<0, -depth, 0)
-    @inbounds Aηuφ[i, j, k] = H * 0.91 * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
+    @inbounds Aηuφ[i, j, k] = H * (1-β) * ∂xᶜᶜᶜ(i, j, k, grid, φ) # H = depth of ocean
 end
 
 @kernel function Aηv!(Aηvφ, grid, φ)
     i, j, k = @index(Global, NTuple)
     depth = grid.immersed_boundary.bottom_height[i, j]
     H = ifelse(depth<0, -depth, 0)
-    @inbounds Aηvφ[i, j, k] = H * 0.91 * ∂yᶜᶜᶜ(i, j, k, grid, φ)
+    @inbounds Aηvφ[i, j, k] = H * (1-β) * ∂yᶜᶜᶜ(i, j, k, grid, φ)
 end
 
 @kernel function Aηη!(Aηηφ, grid, φ)
