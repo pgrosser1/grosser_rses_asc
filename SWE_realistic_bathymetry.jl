@@ -200,7 +200,6 @@ function create_right_hand_sides_eta_perturbation(grid, lv, ω)
     return RHS_u, RHS_v, RHS_η, η_equilibrium
 end
 
-
 if use_formulation_eta
     RHS_u, RHS_v, RHS_η = create_right_hand_sides_total_eta(grid, lv, ω)
 else
