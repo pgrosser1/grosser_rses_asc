@@ -10,7 +10,10 @@ using Oceananigans.Architectures: architecture, device_event, device
 using Oceananigans.Utils: launch!
 using Oceananigans.BoundaryConditions: fill_halo_regions!
 using Oceananigans.Operators
-using Oceananigans.Grids: new_data, xnode, ynode, xnodes, ynodes
+using Oceananigans.BuoyancyModels: g_Earth
+using Oceananigans.Grids: R_Earth, new_data, xnode, ynode, xnodes, ynodes,
+                          inactive_cell, inactive_node, peripheral_node
+using Oceananigans.Coriolis: Ω_Earth
 using Oceananigans.Solvers: solve!,
                             PreconditionedConjugateGradientSolver,
                             MultigridSolver
@@ -22,19 +25,22 @@ using KernelAbstractions: @kernel, @index
 using GLMakie
 Makie.inline!(true)
 
+g = g_Earth # gravitational constant
+Ω = Ω_Earth # Rotation of the Earth
+R = R_Earth # Radius of the Earth
+
+# if use_formulation_eta == true then u, v, η
+# else if use_formulation_eta == false then u, v, η_perturbation
+use_formulation_eta = false
+
 λ = 0.2 #1/5(secs)
-g = 9.8
-#ω = 0.7292117*10^(-4)
-ω = 5
-Ω = 2*π/(24*3600) # Rotation of the earth
-R = 6.38*10^6 # Radius of the earth
+ω = 1.405189e-4
+β = 0.09
 
 # include("one_degree_inputs.jl")
 # include("create_bathymetry.jl")
 
 include("utilities_to_create_matrix.jl")
-
-include("SWE_matrix_components.jl")
 
 # Now let's construct a grid and play around
 arch = CPU()
@@ -45,33 +51,63 @@ Nz = 1
 # Bathymetry
 file = jldopen("data/bathymetry_three_degree.jld2") # ie. three degrees of resolution (360/3 = 120 degrees x, 150/3 = 50 degrees y)
 bathymetry = file["bathymetry"]
+bathymetry[ bathymetry .>= 0.0] .= 0.1
 close(file)
 
-H = abs.(minimum(bathymetry))
-H_vector = zeros(Nx,Ny)
-[H_vector[i, j] = -1*bathymetry[i,j] for i in 1:Nx, j in 1:Ny]
+#=
+Nx = 180
+Ny = 75
+Nz = 1
 
-heatmap(H_vector)
+# Bathymetry
+file = jldopen("data/bathymetry_two_degree.jld2") # ie. three degrees of resolution (360/3 = 120 degrees x, 150/3 = 50 degrees y)
+bathymetry = file["bathymetry"]
+close(file)
+=#
+
+bathymetry[:, 1:2] .= 10
+bathymetry[:, end-1:end] .= 10
+
+H = abs.(minimum(bathymetry))
+
+include("SWE_matrix_components.jl")
 
 underlying_grid = LatitudeLongitudeGrid(arch,
                                         size = (Nx, Ny, Nz),
-                                        longitude = (-180, 180), #λ
-                                        latitude = (-75, 75), #θ in notes, ϕ in Oceananigans
-                                        z = (-H, 0),
+                                        longitude = (-180, 180), # λ
+                                        latitude = (-75, 75),    # θ in notes, ϕ in Oceananigans
+                                        z = (-2H, 2H),
                                         halo = (5, 5, 5),
                                         topology = (Periodic, Periodic, Bounded))
 # v (y) can be periodic if you make the northern-most and southern-most points 0 (so then periodic is appropriate)
 
 grid = ImmersedBoundaryGrid(underlying_grid, GridFittedBottom(bathymetry))
 
-using Oceananigans.Grids: inactive_cell, inactive_node, peripheral_node
-
-[!inactive_cell(i, j, k, grid) for i=1:Nx, j=1:Ny, k=1:Nz]
-[!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz] # Inactive for u grid
-[peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx+1, j=1:Ny, k=1:Nz]
-
-land_ocean = [!peripheral_node(i, j, k, grid, Center(), Center(), Center()) for i=1:Nx, j=1:Ny, k=1:Nz]
+actives     = [!inactive_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx, j=1:Ny, k=1:Nz]
+peripherals = [peripheral_node(i, j, k, grid, Face(), Center(), Center()) for i=1:Nx, j=1:Ny, k=1:Nz]
+is_ocean    = [!peripheral_node(i, j, 1, grid, Center(), Center(), Center()) for i=1:Nx, j=1:Ny]
 # Will give 1 for active node, 0 for inactive/peripheral node
+
+fig = Figure()
+ax1 = Axis(fig[1, 1])
+ax2 = Axis(fig[2, 1])
+ax3 = Axis(fig[3, 1])
+ax4 = Axis(fig[4, 1])
+
+hm = heatmap!(ax1, bathymetry)
+Colorbar(fig[1, 2], hm)
+
+hm = heatmap!(ax2, actives[:, :, 1])
+Colorbar(fig[2, 2], hm)
+
+hm = heatmap!(ax3, peripherals[:, :, 1])
+Colorbar(fig[3, 2], hm)
+
+hm = heatmap!(ax4, is_ocean)
+Colorbar(fig[4, 2], hm)
+
+fig
+
 
 # Ensure the value of peripheral_node is correct
 #fig = Figure()
@@ -94,58 +130,102 @@ v = Field(loc, grid)
 
 η = CenterField(grid)
 
+
+function zero_peripheral_node_values(location, f, grid)
+    LX, LY, LZ = location[1], location[2], location[3]
+    Nx, Ny, Nz = size(grid)
+
+    for k = 1:Nz, j = 1:Ny, i = 1:Nx
+        if peripheral_node(i, j, k, grid, LX, LY, LZ)
+            f[i, j, k] = 0
+        end
+    end
+    
+    return f
+end
+
+
 # Right-hand sides
-lv = 0.736
+lv = 0.693
 
-# For RHS_u, λ must be on the faces, ϕ must be on the centers (via construction of the u field)
-λ_u = xnodes(Face, grid)
-ϕ_u = ynodes(Center, grid)
-RHS_u = complex(zeros(size(grid)))
-# grid is Nx by Ny
-for i in 1:length(λ_u)
-        for j in 1:length(ϕ_u)
-                RHS_u[i, j] = g/(R*cosd(ϕ_u[j]))*(-2*im*pi/180)*lv*0.242334*cosd(ϕ_u[j])^2*exp(-2*im*deg2rad(λ_u[i]))
-        end
+function create_right_hand_sides_total_eta(grid, lv, ω)
+    Nx, Ny, _ = size(grid)
+    # For RHS_u, λ must be on the faces, ϕ must be on the centers (via construction of the u field)
+    λ_u = xnodes(Face, grid)
+    ϕ_u = ynodes(Center, grid)
+    RHS_u = complex(zeros((Nx, Ny)))
+
+    # grid is Nx by Ny
+    for j in 1:Ny, i in 1:Nx
+        RHS_u[i, j] = g / (R * cosd(ϕ_u[j])) * (π/180) * (-2im) * lv * 0.242334 * cosd(ϕ_u[j])^2 * exp(-2im * deg2rad(λ_u[i]))
+    end
+
+    RHS_u = zero_peripheral_node_values((Face(), Center(), Center()), RHS_u, grid)
+
+    # Factor of pi/180 comes from taking the derivative of a value in degrees
+
+    # For RHS_v, λ must be on the centers, ϕ must be on the faces (via construction of the v field)
+    λ_v = xnodes(Center, grid)
+    ϕ_v = ynodes(Face, grid)
+    RHS_v = complex(zeros((Nx, Ny)))
+
+    for j in 1:length(ϕ_v), i in 1:length(λ_v)
+        RHS_v[i, j] = -g / R * lv * 0.242334 * (π/180) * 2 * cosd(ϕ_v[j]) * sind(ϕ_v[j]) * exp(-2im * deg2rad(λ_v[i]))
+    end
+
+    RHS_v = zero_peripheral_node_values((Center(), Face(), Center()), RHS_v, grid)
+
+    RHS_η = zeros(size(grid))
+    
+    return RHS_u, RHS_v, RHS_η
 end
 
-# Set the RHS to 0 for peripheral and inactive cells
-for i = 1:Nx
-        for j = 1:Ny
-                for k = 1:Nz
-                        if peripheral_node(i, j, k, grid, Face(), Center(), Center())
-                                RHS_u[i, j, k] = 0
-                        end
-                end
-        end
-end
+function create_right_hand_sides_eta_perturbation(grid, lv, ω)
+    Nx, Ny, _ = size(grid)
 
-# Factor of pi/180 comes from taking the derivative of a value in degrees
+    η_equilibrium = complex(zeros(size(grid)))
 
-# For RHS_v, λ must be on the centers, ϕ must be on the faces (via construction of the v field)
-λ_v = xnodes(Center, grid)
-ϕ_v = ynodes(Face, grid)
-RHS_v = complex(zeros(size(grid)))
-for i in 1:length(λ_v)
-        for j in 1:length(ϕ_v)
-                RHS_v[i, j] = -g*1/R*lv*0.242334*(2*pi/180)*cosd(ϕ_v[j])*sind(ϕ_v[j])*exp(-2*im*deg2rad(λ_v[i]))
-        end
-end
+    for j in 1:Ny, i in 1:Nx
+        λ = xnode(Center(), i, grid)
+        φ = ynode(Center(), j, grid)
+        η_equilibrium[i, j] = lv * 0.242334 * cosd(φ)^2 * exp(-2im * deg2rad(λ))
+    end
+    
+    RHS_u = zeros(size(grid))
+    
+    RHS_v = zeros(size(grid))
 
-# Set the RHS to 0 for peripheral and inactive cells
-for i = 1:Nx
-        for j = 1:Ny
-                for k = 1:Nz
-                        if peripheral_node(i, j, k, grid, Center(), Face(), Center())
-                                RHS_v[i, j, k] = 0
-                        end
-                end
-        end
+    RHS_η = im * ω * η_equilibrium
+        
+    return RHS_u, RHS_v, RHS_η, η_equilibrium
 end
 
 
-RHS_η = zeros(size(grid))
+if use_formulation_eta
+    RHS_u, RHS_v, RHS_η = create_right_hand_sides_total_eta(grid, lv, ω)
+else
+    RHS_u, RHS_v, RHS_η, η_equilibrium = create_right_hand_sides_eta_perturbation(grid, lv, ω)
+end
 
-heatmap(λ_u, ϕ_u, real.(RHS_u[:,:,1]))
+mask = eltype(grid).(is_ocean)
+mask[is_ocean .== 0] .= NaN
+mask = mask
+
+fig = Figure()
+axu = Axis(fig[1, 1]; title="RHS u")
+axv = Axis(fig[2, 1]; title="RHS v")
+axη = Axis(fig[3, 1]; title="RHS η")
+
+hmu = heatmap!(axu, xnodes(Face, grid), ynodes(Center, grid), mask .* real.(RHS_u[:, :, 1]))
+Colorbar(fig[1, 2], hmu)
+
+hmv = heatmap!(axv, xnodes(Center, grid), ynodes(Face, grid), mask .* real.(RHS_v[:, :, 1]))
+Colorbar(fig[2, 2], hmv)
+
+hmη = heatmap!(axη, xnodes(Center, grid), ynodes(Center, grid), mask .* real.(RHS_η[:, :, 1]))
+Colorbar(fig[3, 2], hmη)
+fig
+
 
 # Construct the matrix to inspect
 Auu = initialize_matrix(arch, u, u, compute_Auu!)
@@ -158,49 +238,66 @@ Aηu = initialize_matrix(arch, η, u, compute_Aηu!)
 Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
 Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
-# Add an iω*1 matrix to Auu, Avv, Aηη
-Auu_iom = Auu .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
-Avv_iom = Avv .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
-Aηη_iom = Aηη .+ Matrix(im * ω * I, (Nx*Ny, Nx*Ny))
+# Add an -iω*1 matrix to Auu, Avv, Aηη
+Auu_iω = Auu .+ Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
+Avv_iω = Avv .+ Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
+Aηη_iω = Aηη .+ Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
 
-A = [ Auu_iom   Auv     Auη;
-        Avv   Avv_iom   Avη;
-        Aηu     Aηv   Aηη_iom]
+A = [ Auu_iω   Auv    Auη;
+        Avv   Avv_iω  Avη;
+        Aηu    Aηv   Aηη_iω]
 
-#Ainverse = I / Matrix(A)
+RHS = [reshape(RHS_u, (Nx*Ny, 1));
+       reshape(RHS_v, (Nx*Ny, 1));
+       reshape(RHS_η, (Nx*Ny, 1))]
 
-RHS_u = reshape(RHS_u, (Nx*Ny,1))
-RHS_v = reshape(RHS_v, (Nx*Ny,1))
-RHS_η = reshape(RHS_η, (Nx*Ny,1))
-RHS = [RHS_u; RHS_v; RHS_η]
-
-#b_test = randn(Complex{Float64}, Nx*Ny*3)
-
-x_truth = Ainverse * RHS
-
-x = zeros(Complex{Float64}, Nx*Ny*3)
+x = zeros(Complex{eltype(grid)}, Nx*Ny*3)
 
 # make sure we give sparse A here
 IterativeSolvers.idrs!(x, A, RHS)
 
-u_soln = x[1:(Nx*Ny)]
-u_soln = reshape(u_soln, (Nx,Ny))
-v_soln = x[(Nx*Ny + 1):(2*Nx*Ny)]
-v_soln = reshape(v_soln, (Nx,Ny))
-η_soln = x[(2*Nx*Ny + 1):(3*Nx*Ny)]
-η_soln = reshape(η_soln, (Nx,Ny))
-
-fig = Figure()
-ax = Axis(fig[1, 1])
-hm = heatmap!(ax, real.(η_soln))
-Colorbar(fig[1, 2], hm)
-fig
-
-heatmap(real.(u_soln))
-heatmap(real.(v_soln))
-
 RHS_soln = A * x
 @show RHS_soln ≈ RHS
-@show x ≈ x_truth
 
-#@show x ≈ x_truth
+function get_solution_from_x(x; mask = nothing)
+    u = reshape(x[        1:  Nx*Ny], (Nx, Ny))
+    v = reshape(x[  Nx*Ny+1:2*Nx*Ny], (Nx, Ny))
+    η = reshape(x[2*Nx*Ny+1:3*Nx*Ny], (Nx, Ny))
+
+    if mask !== nothing
+        u[mask .== 0] .= NaN
+        v[mask .== 0] .= NaN
+        η[mask .== 0] .= NaN
+    end
+
+    return u, v, η
+end
+
+u_soln, v_soln, η_soln = get_solution_from_x(x; mask = is_ocean)
+
+if !use_formulation_eta
+    η_soln .+= η_equilibrium
+end
+
+u_colorrange = (-1, 1)
+v_colorrange = (-1, 1)
+η_colorrange = (-3, 3)
+
+fig = Figure(resolution=(1000, 600))
+axu = Axis(fig[1, 1])
+axv = Axis(fig[2, 1])
+axη = Axis(fig[3, 1])
+
+hmu = heatmap!(axu, xnodes(Face, grid), ynodes(Center, grid), real.(u_soln); colorrange=u_colorrange)
+Colorbar(fig[1, 2], hmu)
+
+hmv = heatmap!(axv, xnodes(Center, grid), ynodes(Face, grid), real.(v_soln); colorrange=v_colorrange)
+Colorbar(fig[2, 2], hmv)
+
+hmη = heatmap!(axη, xnodes(Center, grid), ynodes(Center, grid), real.(η_soln); colorrange=η_colorrange)
+Colorbar(fig[3, 2], hmη)
+fig
+
+# Ainverse = I / Matrix(A)
+# x_truth = Ainverse * RHS
+# @show x ≈ x_truth
