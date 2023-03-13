@@ -31,7 +31,7 @@ R = R_Earth # Radius of the Earth
 
 # if use_formulation_eta == true then u, v, η
 # else if use_formulation_eta == false then u, v, η_perturbation
-use_formulation_eta = false
+use_formulation_eta = true
 
 λ = 0.2 #1/5(secs)
 ω = 1.405189e-4
@@ -238,9 +238,27 @@ Aηv = initialize_matrix(arch, η, v, compute_Aηv!)
 Aηη = initialize_matrix(arch, η, η, compute_Aηη!)
 
 # Add an -iω*1 matrix to Auu, Avv, Aηη
-Auu_iω = Auu .+ Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
-Avv_iω = Avv .+ Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
-Aηη_iω = Aηη .+ Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
+for i in 1:length(Nx), j in 1:length(Ny)
+    depth[i, j] = grid.immersed_boundary.bottom_height[i, j]
+    if depth[i, j] < 0
+        H[i, j] = -1*depth[i, j]
+    else
+        H[i, j] = 0
+    end
+
+    Auu_iω = Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
+    Auu_iω[i, j] = Auu_iω/H[i, j]
+    Avv_iω = Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
+    Avv_iω[i, j] = Avv_iω/H[i, j]
+    Aηη_iω = Matrix(-im * ω * I, (Nx*Ny, Nx*Ny))
+    Aηη_iω[i, j] = Aηη_iω/H[i, j]
+
+end
+
+Auu_iω = Auu .+ Auu_iω
+Avv_iω = Avv .+ Avv_iω
+Aηη_iω = Aηη .+ Aηη_iω
+
 
 A = [ Auu_iω   Auv    Auη;
         Avv   Avv_iω  Avη;
