@@ -123,7 +123,7 @@ end # Interpolation not neccessary as ∂x turns η's x,y,z = ccc environment in
 @kernel function Avu!(Avuφ, grid, φ)
     i, j, k = @index(Global, NTuple)
     f = 2Ω * sind(ynode(Face(), j, grid)) # For the v environment, f (dependent on y node, which is on face) needs to be on the face (as y is on face)
-    @inbounds Avuφ[i, j, k] = -f * ℑxyᶜᶠᵃ(i, j, k, grid, φ)
+    @inbounds Avuφ[i, j, k] = + f * ℑxyᶜᶠᵃ(i, j, k, grid, φ)
 end
 
 @kernel function Avv!(Avvφ, grid, φ)
